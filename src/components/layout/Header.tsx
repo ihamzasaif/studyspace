@@ -79,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
           className="flex items-center gap-2 p-1 pl-2.5 rounded-lg bg-white dark:bg-neutral-800/80 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200/70 dark:border-neutral-700/60 text-xs font-medium text-neutral-700 dark:text-neutral-300 transition-colors"
           title="Edit Profile"
         >
-          <span className="hidden sm:inline max-w-[100px] truncate">
+          <span className="hidden sm:inline font-medium text-neutral-800 dark:text-neutral-200">
             {state.profile.name || 'Profile'}
           </span>
           <div
@@ -90,13 +90,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
           </div>
         </button>
 
-        {/* Theme toggle (desktop quick access) */}
+        {/* Theme toggle */}
         <button
           onClick={() => {
             playSoftClick();
             toggleTheme();
           }}
-          className="hidden md:flex p-2 rounded-lg text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors"
+          className="flex p-2 rounded-lg text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors"
           title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           aria-label="Toggle theme"
         >
@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
             playSoftClick();
             onOpenSettings();
           }}
-          className="hidden md:flex p-2 rounded-lg text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors"
+          className="flex p-2 rounded-lg text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors"
           title="Preferences & Backup"
           aria-label="Preferences"
         >

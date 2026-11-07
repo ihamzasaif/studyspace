@@ -127,7 +127,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
         </div>
 
         {/* Profile Setup Reminder or Exam Countdown Card */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {!hasProfile && (
             <button
               onClick={onOpenProfile}
@@ -155,17 +155,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
                   <Edit2 className="w-3 h-3" />
                 </button>
               </div>
-              <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 line-clamp-1 max-w-[180px]">
+              <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 break-words">
                 {state.examCountdown.title}
               </p>
-              <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 flex-wrap">
                 <span className="font-semibold text-teal-600 dark:text-teal-400 tabular-nums">
                   {examInfo?.label}
                 </span>
                 {examSubject && (
                   <>
                     <span>·</span>
-                    <span className="truncate max-w-[90px]">{examSubject.name}</span>
+                    <span className="break-words">{examSubject.name}</span>
                   </>
                 )}
               </div>
@@ -388,7 +388,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
 
                       <div className="flex-1 min-w-0">
                         <p
-                          className={`text-sm font-medium line-clamp-1 transition-colors ${
+                          className={`text-sm font-medium break-words transition-colors ${
                             goal.completed
                               ? 'line-through text-neutral-400 dark:text-neutral-500'
                               : 'text-neutral-800 dark:text-neutral-200'
@@ -460,30 +460,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
                   return (
                     <div
                       key={block.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800/60"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800/60"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                         <div
-                          className="w-2.5 h-9 rounded-full shrink-0"
+                          className="w-2.5 h-9 rounded-full shrink-0 mt-0.5 sm:mt-0"
                           style={{ backgroundColor: subject?.color || '#0d9488' }}
                         />
-                        <div>
-                          <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 break-words leading-snug">
                             {block.title || subject?.name || 'Study Block'}
                           </p>
-                          <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                            {subject && <span>{subject.name}</span>}
+                          <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap mt-0.5">
+                            {subject && <span className="break-words font-medium">{subject.name}</span>}
                             {block.location && (
                               <>
                                 <span>·</span>
-                                <span>{block.location}</span>
+                                <span className="break-words">{block.location}</span>
                               </>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      <div className="text-xs font-mono tabular-nums text-neutral-600 dark:text-neutral-400 bg-white dark:bg-neutral-900 px-2.5 py-1 rounded-md border border-neutral-200/60 dark:border-neutral-800/60">
+                      <div className="text-xs font-mono tabular-nums text-neutral-600 dark:text-neutral-400 bg-white dark:bg-neutral-900 px-2.5 py-1 rounded-md border border-neutral-200/60 dark:border-neutral-800/60 shrink-0 self-start sm:self-auto">
                         {block.startTime} – {block.endTime}
                       </div>
                     </div>
@@ -591,12 +591,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
                     className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/50 dark:border-neutral-800/50 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/70 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
                         <span
-                          className="w-2.5 h-2.5 rounded-full"
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: sub.color }}
                         />
-                        <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 truncate max-w-[170px]">
+                        <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 break-words leading-snug">
                           {sub.name}
                         </span>
                       </div>

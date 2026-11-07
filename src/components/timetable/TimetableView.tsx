@@ -112,19 +112,19 @@ export const TimetableView: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 break-words">
             Study Timetable
           </h1>
-          <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
+          <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 mt-0.5 break-words">
             Weekly class schedule, seminar times, and structured study blocks.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* View Mode Toggle */}
-          <div className="flex items-center p-0.5 bg-neutral-200/60 dark:bg-neutral-800 rounded-xl text-xs font-medium">
+          <div className="flex items-center p-0.5 bg-neutral-200/60 dark:bg-neutral-800 rounded-xl text-xs font-medium shrink-0">
             <button
               onClick={() => {
                 playSoftClick();
@@ -240,13 +240,13 @@ export const TimetableView: React.FC = () => {
                                   className="w-2 h-2 rounded-full shrink-0"
                                   style={{ backgroundColor: subject?.color || '#0d9488' }}
                                 />
-                                <span className="font-semibold text-neutral-900 dark:text-neutral-100 line-clamp-1">
+                                <span className="font-semibold text-neutral-900 dark:text-neutral-100 break-words leading-tight">
                                   {block.title || subject?.name || 'Class'}
                                 </span>
                               </div>
 
                               {subject && (
-                                <p className="text-[11px] text-neutral-500 dark:text-neutral-400 line-clamp-1 mb-1">
+                                <p className="text-[11px] text-neutral-500 dark:text-neutral-400 break-words leading-tight mb-1">
                                   {subject.name}
                                 </p>
                               )}
@@ -257,7 +257,7 @@ export const TimetableView: React.FC = () => {
                               </div>
 
                               {block.location && (
-                                <div className="flex items-center gap-1 text-[10px] text-neutral-400 mt-1 line-clamp-1">
+                                <div className="flex items-center gap-1 text-[10px] text-neutral-400 mt-1 break-words">
                                   <MapPin className="w-3 h-3 shrink-0" />
                                   <span>{block.location}</span>
                                 </div>

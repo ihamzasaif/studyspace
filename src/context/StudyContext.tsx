@@ -116,12 +116,25 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const todayStr = getTodayString();
 
-  // Tab navigation with browser history
+  // Tab navigation with browser history: Dashboard is always Home base
   const setActiveTab = (newTab: ActiveTab) => {
     if (newTab === activeTabRef.current) return;
+
+    const prevTab = activeTabRef.current;
     activeTabRef.current = newTab;
     setActiveTabState(newTab);
-    window.history.pushState({ type: 'tab', tab: newTab }, '', `#${newTab}`);
+
+    if (newTab === 'dashboard') {
+      window.history.replaceState({ type: 'tab', tab: 'dashboard' }, '', '#dashboard');
+    } else {
+      // If navigating from dashboard, push new tab on top of dashboard
+      // If already on another tab, replace so history stack is always [dashboard, currentTab]
+      if (prevTab === 'dashboard') {
+        window.history.pushState({ type: 'tab', tab: newTab }, '', `#${newTab}`);
+      } else {
+        window.history.replaceState({ type: 'tab', tab: newTab }, '', `#${newTab}`);
+      }
+    }
   };
 
   // Sync with browser back/forward history
@@ -141,11 +154,17 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const initialHash = window.location.hash.replace('#', '').split('-')[0] as ActiveTab;
     const initialTab = validTabs.includes(initialHash) ? initialHash : 'dashboard';
 
+    if (initialTab !== 'dashboard') {
+      window.history.replaceState({ type: 'tab', tab: 'dashboard' }, '', '#dashboard');
+      window.history.pushState({ type: 'tab', tab: initialTab }, '', `#${initialTab}`);
+    } else {
+      window.history.replaceState({ type: 'tab', tab: 'dashboard' }, '', '#dashboard');
+    }
+
     if (initialTab !== activeTabRef.current) {
       activeTabRef.current = initialTab;
       setActiveTabState(initialTab);
     }
-    window.history.replaceState({ type: 'tab', tab: initialTab }, '', `#${initialTab}`);
 
     const handlePopState = (e: PopStateEvent) => {
       // If the state is a modal or if a modal was popped, modal hooks handle closing
@@ -153,18 +172,16 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
-      const targetTab = (e.state?.tab || window.location.hash.replace('#', '').split('-')[0]) as ActiveTab;
-      if (targetTab && validTabs.includes(targetTab)) {
-        if (targetTab !== activeTabRef.current) {
-          activeTabRef.current = targetTab;
-          setActiveTabState(targetTab);
-        }
-      } else {
-        if (activeTabRef.current !== 'dashboard') {
-          activeTabRef.current = 'dashboard';
-          setActiveTabState('dashboard');
-        }
+      // If user was on ANY non-dashboard tab, Back ALWAYS returns straight to Dashboard (Home)
+      if (activeTabRef.current !== 'dashboard') {
+        activeTabRef.current = 'dashboard';
+        setActiveTabState('dashboard');
+        window.history.replaceState({ type: 'tab', tab: 'dashboard' }, '', '#dashboard');
+        return;
       }
+
+      // If already on dashboard and back was pressed, keep them on dashboard (don't exit app)
+      window.history.pushState({ type: 'tab', tab: 'dashboard' }, '', '#dashboard');
     };
 
     window.addEventListener('popstate', handlePopState);

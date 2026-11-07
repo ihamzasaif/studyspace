@@ -279,12 +279,14 @@ export const StatsView: React.FC = () => {
           )}
 
           {/* Subject Legend */}
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
             {subjectDistribution.map((item) => (
-              <div key={item.name} className="flex items-center gap-2 text-xs">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                <span className="truncate text-neutral-700 dark:text-neutral-300 font-medium">{item.name}</span>
-                <span className="ml-auto font-mono text-neutral-400 tabular-nums">{item.value}h</span>
+              <div key={item.name} className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="break-words text-neutral-700 dark:text-neutral-300 font-medium leading-tight">{item.name}</span>
+                </div>
+                <span className="font-mono text-neutral-400 tabular-nums shrink-0">{item.value}h</span>
               </div>
             ))}
           </div>

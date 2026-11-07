@@ -75,7 +75,7 @@ const MainLayout: React.FC = () => {
         />
 
         {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pt-5 pb-20 md:pb-8">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pt-5 pb-20 xl:pb-8">
           {renderActiveView()}
         </main>
       </div>

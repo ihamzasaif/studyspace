@@ -154,7 +154,7 @@ export const NotesView: React.FC = () => {
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <h4
-                        className={`text-xs font-semibold line-clamp-1 ${
+                        className={`text-xs font-semibold break-words leading-snug flex-1 ${
                           isSelected
                             ? 'text-teal-900 dark:text-teal-200 font-bold'
                             : 'text-neutral-900 dark:text-neutral-100'
@@ -163,17 +163,17 @@ export const NotesView: React.FC = () => {
                         {note.title}
                       </h4>
                       {note.isPinned && (
-                        <Pin className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                        <Pin className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />
                       )}
                     </div>
 
-                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 line-clamp-2 leading-relaxed">
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed line-clamp-3">
                       {note.content || 'Empty note...'}
                     </p>
 
                     <div className="flex items-center justify-between gap-2 mt-2 text-[10px] text-neutral-400">
                       {subject ? (
-                        <span className="font-medium truncate max-w-[120px]" style={{ color: subject.color }}>
+                        <span className="font-medium break-words" style={{ color: subject.color }}>
                           {subject.name}
                         </span>
                       ) : (

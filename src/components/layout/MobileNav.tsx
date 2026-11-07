@@ -44,16 +44,27 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProf
     { id: 'stats', label: 'Progress & Stats', icon: BarChart3 },
   ];
 
+  const allNavTabs: { id: ActiveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+    { id: 'goals', label: 'Goals', icon: CheckSquare },
+    { id: 'timetable', label: 'Timetable', icon: Calendar },
+    { id: 'subjects', label: 'Subjects', icon: BookOpen },
+    { id: 'habits', label: 'Habits', icon: Sparkles },
+    { id: 'timer', label: 'Focus', icon: Timer },
+    { id: 'notes', label: 'Quick Pad', icon: FileText },
+    { id: 'stats', label: 'Stats', icon: BarChart3 },
+  ];
+
   return (
     <>
-      {/* More Drawer */}
+      {/* More Drawer for small mobile screens */}
       {isMoreOpen && (
         <div
-          className="md:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
+          className="xl:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
           onClick={() => setIsMoreOpen(false)}
         >
           <div
-            className="bg-white dark:bg-neutral-900 rounded-t-2xl p-5 border-t border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4"
+            className="bg-white dark:bg-neutral-900 rounded-t-2xl p-5 border-t border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 max-w-lg mx-auto w-full"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
@@ -83,10 +94,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProf
                 {state.profile.name ? state.profile.name[0].toUpperCase() : 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-teal-900 dark:text-teal-200 truncate">
+                <p className="text-xs font-bold text-teal-900 dark:text-teal-200 break-words leading-tight">
                   {state.profile.name || 'Setup Your Profile'}
                 </p>
-                <p className="text-[11px] text-teal-700/80 dark:text-teal-400 truncate">
+                <p className="text-[11px] text-teal-700/80 dark:text-teal-400 break-words mt-0.5 leading-tight">
                   {state.profile.profession || 'Set name, profession & target'}
                 </p>
               </div>
@@ -143,47 +154,75 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProf
         </div>
       )}
 
-      {/* Fixed Bottom Navigation */}
+      {/* Fixed Bottom Navigation (Active for any screen < xl, e.g. mobile, tablet, and split-screen preview) */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#16181D]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 px-2 py-1.5 flex items-center justify-around"
-        aria-label="Mobile Navigation"
+        className="xl:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#16181D]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 px-2 py-1.5 transition-colors"
+        aria-label="Bottom Navigation"
       >
-        {mainTabs.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => {
-                playSoftClick();
-                setActiveTab(item.id);
-              }}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors ${
-                isActive
-                  ? 'text-teal-700 dark:text-teal-400 font-semibold'
-                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900'
-              }`}
-            >
-              <Icon className="w-5 h-5 mb-0.5" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+        {/* On small phones (< sm): 4 main items + More button */}
+        <div className="flex sm:hidden items-center justify-around">
+          {mainTabs.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  playSoftClick();
+                  setActiveTab(item.id);
+                }}
+                className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors ${
+                  isActive
+                    ? 'text-teal-700 dark:text-teal-400 font-semibold'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900'
+                }`}
+              >
+                <Icon className="w-5 h-5 mb-0.5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
 
-        <button
-          onClick={() => {
-            playSoftClick();
-            setIsMoreOpen(true);
-          }}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors ${
-            ['subjects', 'habits', 'notes', 'stats'].includes(activeTab)
-              ? 'text-teal-700 dark:text-teal-400 font-semibold'
-              : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900'
-          }`}
-        >
-          <MoreHorizontal className="w-5 h-5 mb-0.5" />
-          <span>More</span>
-        </button>
+          <button
+            onClick={() => {
+              playSoftClick();
+              setIsMoreOpen(true);
+            }}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors ${
+              ['subjects', 'habits', 'notes', 'stats'].includes(activeTab)
+                ? 'text-teal-700 dark:text-teal-400 font-semibold'
+                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900'
+            }`}
+          >
+            <MoreHorizontal className="w-5 h-5 mb-0.5" />
+            <span>More</span>
+          </button>
+        </div>
+
+        {/* On tablet / split-screen preview (sm to xl): All 8 tabs laid out directly */}
+        <div className="hidden sm:flex items-center justify-between max-w-4xl mx-auto px-2">
+          {allNavTabs.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  playSoftClick();
+                  setActiveTab(item.id);
+                }}
+                className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[11px] font-medium transition-colors ${
+                  isActive
+                    ? 'text-teal-700 dark:text-teal-400 font-bold'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+                }`}
+              >
+                <Icon className="w-4 h-4 mb-0.5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </>
   );

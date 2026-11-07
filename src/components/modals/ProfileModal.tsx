@@ -95,14 +95,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               {getInitials()}
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
+              <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100 break-words leading-tight">
                 {name.trim() || 'Your Name'}
               </h3>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 break-words mt-0.5">
                 {profession.trim() || 'Add profession / field of study'}
               </p>
               {institution.trim() && (
-                <p className="text-[11px] text-teal-600 dark:text-teal-400 truncate mt-0.5">
+                <p className="text-[11px] text-teal-600 dark:text-teal-400 break-words mt-0.5">
                   {institution.trim()}
                 </p>
               )}

@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings, onOpenProfile 
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 h-screen shrink-0 bg-white dark:bg-[#16181D] border-r border-neutral-200/80 dark:border-neutral-800/80 select-none transition-colors">
+    <aside className="hidden xl:flex flex-col w-64 h-screen shrink-0 bg-white dark:bg-[#16181D] border-r border-neutral-200/80 dark:border-neutral-800/80 select-none transition-colors">
       {/* Brand Header */}
       <div className="flex items-center justify-between px-6 h-18 border-b border-neutral-200/60 dark:border-neutral-800/60">
         <div className="flex items-center gap-3">
@@ -79,10 +79,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings, onOpenProfile 
             {getInitials()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-neutral-900 dark:text-neutral-100 truncate">
+            <p className="text-xs font-bold text-neutral-900 dark:text-neutral-100 break-words leading-tight">
               {state.profile.name || 'Setup Profile'}
             </p>
-            <p className="text-[11px] text-neutral-400 dark:text-neutral-500 truncate">
+            <p className="text-[11px] text-neutral-400 dark:text-neutral-500 break-words mt-0.5 leading-tight">
               {state.profile.profession || 'Click to add profession'}
             </p>
           </div>

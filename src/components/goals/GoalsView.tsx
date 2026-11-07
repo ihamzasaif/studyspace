@@ -374,7 +374,7 @@ export const GoalsView: React.FC = () => {
 
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-sm font-medium transition-colors ${
+                      className={`text-sm font-medium break-words leading-snug transition-colors ${
                         goal.completed
                           ? 'line-through text-neutral-400 dark:text-neutral-500'
                           : 'text-neutral-900 dark:text-neutral-100'
@@ -384,16 +384,16 @@ export const GoalsView: React.FC = () => {
                     </p>
 
                     {goal.notes && (
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 break-words leading-relaxed whitespace-pre-wrap">
                         {goal.notes}
                       </p>
                     )}
 
                     {/* Metadata line without pills */}
-                    <div className="flex items-center gap-2 mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="flex items-center gap-2 mt-2 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap">
                       {subject && (
-                        <span className="flex items-center gap-1 font-medium" style={{ color: subject.color }}>
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: subject.color }} />
+                        <span className="flex items-center gap-1 font-medium break-words" style={{ color: subject.color }}>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: subject.color }} />
                           {subject.name}
                         </span>
                       )}

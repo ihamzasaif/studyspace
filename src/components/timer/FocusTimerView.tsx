@@ -288,7 +288,7 @@ export const FocusTimerView: React.FC = () => {
             </span>
             {activeSubject && (
               <span
-                className="text-[11px] font-medium mt-1 truncate max-w-[150px]"
+                className="text-[11px] font-medium mt-1 break-words max-w-[220px] px-2 leading-tight"
                 style={{ color: activeSubject.color }}
               >
                 {activeSubject.name}

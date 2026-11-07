@@ -166,122 +166,196 @@ export const HabitsView: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-neutral-100 dark:border-neutral-800/60 bg-neutral-50/50 dark:bg-neutral-800/20">
-                  <th className="py-3 px-4 font-semibold text-neutral-600 dark:text-neutral-300 min-w-[200px]">
-                    Habit Name
-                  </th>
-                  <th className="py-3 px-3 font-semibold text-neutral-600 dark:text-neutral-300 text-center w-24">
-                    Streak
-                  </th>
-                  {past7Days.map((d) => {
-                    const isToday = d === todayStr;
-                    return (
-                      <th
-                        key={d}
-                        className={`py-3 px-2 font-semibold text-center w-12 ${
-                          isToday ? 'text-teal-700 dark:text-teal-400 font-bold' : 'text-neutral-500'
-                        }`}
-                      >
-                        {formatDateShort(d).split(' ')[1] || d.slice(-2)}
-                        <span className="block text-[9px] font-normal text-neutral-400">
-                          {isToday ? 'Today' : addDays(d, 0).slice(5)}
-                        </span>
-                      </th>
-                    );
-                  })}
-                  <th className="py-3 px-3 font-semibold text-neutral-600 dark:text-neutral-300 text-right w-20">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/50">
-                {state.habits.map((habit) => {
-                  const streakInfo = calculateHabitStreak(habit.id, state.habitLogs);
+          <>
+            {/* Mobile View: Dedicated Thumb-Friendly Habit Cards */}
+            <div className="md:hidden divide-y divide-neutral-100 dark:divide-neutral-800/60 p-3 space-y-2.5">
+              {state.habits.map((habit) => {
+                const streakInfo = calculateHabitStreak(habit.id, state.habitLogs);
+                const isTodayDone = (state.habitLogs[todayStr] || []).includes(habit.id);
 
-                  return (
-                    <tr
-                      key={habit.id}
-                      className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors"
-                    >
-                      {/* Name & description */}
-                      <td className="py-3 px-4">
-                        <p className="font-semibold text-neutral-900 dark:text-neutral-100">
+                return (
+                  <div
+                    key={habit.id}
+                    className="p-3.5 rounded-xl bg-neutral-50/70 dark:bg-neutral-800/30 border border-neutral-200/60 dark:border-neutral-800/60 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                            <Flame className="w-3.5 h-3.5 fill-current" />
+                            {streakInfo.current}d streak
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 break-words leading-snug">
                           {habit.name}
-                        </p>
+                        </h4>
                         {habit.description && (
-                          <p className="text-[11px] text-neutral-400 line-clamp-1 mt-0.5">
+                          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 break-words leading-relaxed">
                             {habit.description}
                           </p>
                         )}
-                      </td>
+                      </div>
 
-                      {/* Streak counter */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="inline-flex items-center gap-1 font-semibold text-neutral-800 dark:text-neutral-200 tabular-nums">
-                          <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                          <span>{streakInfo.current}d</span>
-                        </div>
-                      </td>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleOpenEdit(habit)}
+                          className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete habit "${habit.name}"?`)) {
+                              deleteHabit(habit.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
 
-                      {/* Past 7 days checkoff cells */}
-                      {past7Days.map((dateStr) => {
-                        const isDone = (state.habitLogs[dateStr] || []).includes(habit.id);
-                        const isToday = dateStr === todayStr;
+                    {/* Big tap toggle for today on mobile */}
+                    <button
+                      onClick={() => {
+                        playSoftClick();
+                        toggleHabitDay(habit.id, todayStr);
+                      }}
+                      className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                        isTodayDone
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-neutral-800 border-2 border-dashed border-teal-500/50 text-teal-700 dark:text-teal-300 hover:border-teal-600'
+                      }`}
+                    >
+                      <Check className={`w-4 h-4 ${isTodayDone ? 'opacity-100' : 'opacity-40'}`} />
+                      <span>{isTodayDone ? 'Completed Today!' : 'Tap to Mark Done for Today'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
-                        return (
-                          <td key={dateStr} className="py-3 px-2 text-center">
+            {/* Desktop View: Full 7-Day History Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-neutral-100 dark:border-neutral-800/60 bg-neutral-50/50 dark:bg-neutral-800/20">
+                    <th className="py-3 px-4 font-semibold text-neutral-600 dark:text-neutral-300 min-w-[200px]">
+                      Habit Name
+                    </th>
+                    <th className="py-3 px-3 font-semibold text-neutral-600 dark:text-neutral-300 text-center w-24">
+                      Streak
+                    </th>
+                    {past7Days.map((d) => {
+                      const isToday = d === todayStr;
+                      return (
+                        <th
+                          key={d}
+                          className={`py-3 px-2 font-semibold text-center w-12 ${
+                            isToday ? 'text-teal-700 dark:text-teal-400 font-bold' : 'text-neutral-500'
+                          }`}
+                        >
+                          {formatDateShort(d).split(' ')[1] || d.slice(-2)}
+                          <span className="block text-[9px] font-normal text-neutral-400">
+                            {isToday ? 'Today' : addDays(d, 0).slice(5)}
+                          </span>
+                        </th>
+                      );
+                    })}
+                    <th className="py-3 px-3 font-semibold text-neutral-600 dark:text-neutral-300 text-right w-20">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/50">
+                  {state.habits.map((habit) => {
+                    const streakInfo = calculateHabitStreak(habit.id, state.habitLogs);
+
+                    return (
+                      <tr
+                        key={habit.id}
+                        className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors"
+                      >
+                        {/* Name & description */}
+                        <td className="py-3 px-4">
+                          <p className="font-semibold text-neutral-900 dark:text-neutral-100 break-words leading-snug">
+                            {habit.name}
+                          </p>
+                          {habit.description && (
+                            <p className="text-[11px] text-neutral-400 break-words mt-0.5 leading-relaxed">
+                              {habit.description}
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Streak counter */}
+                        <td className="py-3 px-3 text-center">
+                          <div className="inline-flex items-center gap-1 font-semibold text-neutral-800 dark:text-neutral-200 tabular-nums">
+                            <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                            <span>{streakInfo.current}d</span>
+                          </div>
+                        </td>
+
+                        {/* Past 7 days checkoff cells */}
+                        {past7Days.map((dateStr) => {
+                          const isDone = (state.habitLogs[dateStr] || []).includes(habit.id);
+                          const isToday = dateStr === todayStr;
+
+                          return (
+                            <td key={dateStr} className="py-3 px-2 text-center">
+                              <button
+                                onClick={() => {
+                                  playSoftClick();
+                                  toggleHabitDay(habit.id, dateStr);
+                                }}
+                                className={`w-7 h-7 mx-auto rounded-lg flex items-center justify-center transition-all ${
+                                  isDone
+                                    ? 'bg-teal-600 text-white shadow-xs scale-105'
+                                    : isToday
+                                    ? 'border-2 border-dashed border-teal-500/60 text-transparent hover:border-teal-600'
+                                    : 'bg-neutral-100 dark:bg-neutral-800 text-transparent hover:bg-neutral-200'
+                                }`}
+                                title={`${habit.name} on ${dateStr}: ${isDone ? 'Completed' : 'Not done'}`}
+                              >
+                                <Check className={`w-3.5 h-3.5 ${isDone ? 'opacity-100' : 'opacity-0'}`} />
+                              </button>
+                            </td>
+                          );
+                        })}
+
+                        {/* Actions */}
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(habit)}
+                              className="p-1 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => {
-                                playSoftClick();
-                                toggleHabitDay(habit.id, dateStr);
+                                if (confirm(`Delete habit "${habit.name}"?`)) {
+                                  deleteHabit(habit.id);
+                                }
                               }}
-                              className={`w-7 h-7 mx-auto rounded-lg flex items-center justify-center transition-all ${
-                                isDone
-                                  ? 'bg-teal-600 text-white shadow-xs scale-105'
-                                  : isToday
-                                  ? 'border-2 border-dashed border-teal-500/60 text-transparent hover:border-teal-600'
-                                  : 'bg-neutral-100 dark:bg-neutral-800 text-transparent hover:bg-neutral-200'
-                              }`}
-                              title={`${habit.name} on ${dateStr}: ${isDone ? 'Completed' : 'Not done'}`}
+                              className="p-1 rounded text-neutral-400 hover:text-red-600"
+                              title="Delete"
                             >
-                              <Check className={`w-3.5 h-3.5 ${isDone ? 'opacity-100' : 'opacity-0'}`} />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          </td>
-                        );
-                      })}
-
-                      {/* Actions */}
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleOpenEdit(habit)}
-                            className="p-1 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm(`Delete habit "${habit.name}"?`)) {
-                                deleteHabit(habit.id);
-                              }
-                            }}
-                            className="p-1 rounded text-neutral-400 hover:text-red-600"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
