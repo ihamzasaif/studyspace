@@ -3,6 +3,7 @@ import { useStudy } from '../../context/StudyContext';
 import { COLOR_PALETTE } from '../../utils/storage';
 import { X, User, Briefcase, GraduationCap, Target, Check, Sparkles } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -10,6 +11,8 @@ interface ProfileModalProps {
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
+  useBackHandler(isOpen, onClose, 'profile-modal');
+
   const { state, updateProfile } = useStudy();
 
   const [name, setName] = useState(state.profile.name || '');

@@ -4,6 +4,7 @@ import { Subject } from '../../types';
 import { COLOR_PALETTE } from '../../utils/storage';
 import { Plus, Edit2, Trash2, Clock, CheckCircle2, ChevronRight, X, BookOpen } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export const SubjectsView: React.FC = () => {
   const {
@@ -30,6 +31,10 @@ export const SubjectsView: React.FC = () => {
 
   // Selected subject for expanded drill-down view
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+
+  useBackHandler(isModalOpen, () => setIsModalOpen(false), 'subject-modal');
+  useBackHandler(Boolean(logTimeSubject), () => setLogTimeSubject(null), 'log-time-modal');
+  useBackHandler(Boolean(selectedSubId), () => setSelectedSubId(null), 'subject-detail');
 
   const openAddModal = () => {
     setEditingSubject(null);

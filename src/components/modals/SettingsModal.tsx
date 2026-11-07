@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStudy } from '../../context/StudyContext';
 import { X, Download, Upload, RotateCcw, Trash2, Bell, Clock, Calendar, Check } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,6 +10,8 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  useBackHandler(isOpen, onClose, 'settings-modal');
+
   const { state, updateSettings, setExamCountdown, resetToSampleData, clearData, exportData, importData } = useStudy();
 
   const [dailyTarget, setDailyTarget] = useState(state.settings.dailyTargetHours);

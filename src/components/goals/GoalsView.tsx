@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { formatDateDisplay, addDays, getTodayString } from '../../utils/date';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export const GoalsView: React.FC = () => {
   const {
@@ -38,6 +39,7 @@ export const GoalsView: React.FC = () => {
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  useBackHandler(isModalOpen, () => setIsModalOpen(false), 'goal-modal');
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [title, setTitle] = useState('');
   const [subjectId, setSubjectId] = useState(state.subjects[0]?.id || '');

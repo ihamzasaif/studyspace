@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 interface MobileNavProps {
   onOpenSettings: () => void;
@@ -26,6 +27,8 @@ interface MobileNavProps {
 export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProfile }) => {
   const { state, activeTab, setActiveTab, theme, toggleTheme } = useStudy();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+
+  useBackHandler(isMoreOpen, () => setIsMoreOpen(false), 'mobile-more-drawer');
 
   const mainTabs: { id: ActiveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },

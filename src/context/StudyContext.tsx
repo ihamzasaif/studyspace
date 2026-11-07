@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import {
   StudyState,
   Subject,
@@ -103,7 +103,10 @@ const StudyContext = createContext<StudyContextType | undefined>(undefined);
 
 export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<StudyState>(() => loadStudyState());
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [activeTab, setActiveTabState] = useState<ActiveTab>('dashboard');
+  const activeTabRef = useRef<ActiveTab>(activeTab);
+  activeTabRef.current = activeTab;
+
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('study_room_theme');
@@ -112,6 +115,61 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   });
 
   const todayStr = getTodayString();
+
+  // Tab navigation with browser history
+  const setActiveTab = (newTab: ActiveTab) => {
+    if (newTab === activeTabRef.current) return;
+    activeTabRef.current = newTab;
+    setActiveTabState(newTab);
+    window.history.pushState({ type: 'tab', tab: newTab }, '', `#${newTab}`);
+  };
+
+  // Sync with browser back/forward history
+  useEffect(() => {
+    const validTabs: ActiveTab[] = [
+      'dashboard',
+      'subjects',
+      'goals',
+      'timetable',
+      'habits',
+      'timer',
+      'notes',
+      'stats',
+      'profile',
+    ];
+
+    const initialHash = window.location.hash.replace('#', '').split('-')[0] as ActiveTab;
+    const initialTab = validTabs.includes(initialHash) ? initialHash : 'dashboard';
+
+    if (initialTab !== activeTabRef.current) {
+      activeTabRef.current = initialTab;
+      setActiveTabState(initialTab);
+    }
+    window.history.replaceState({ type: 'tab', tab: initialTab }, '', `#${initialTab}`);
+
+    const handlePopState = (e: PopStateEvent) => {
+      // If the state is a modal or if a modal was popped, modal hooks handle closing
+      if (e.state?.type === 'modal') {
+        return;
+      }
+
+      const targetTab = (e.state?.tab || window.location.hash.replace('#', '').split('-')[0]) as ActiveTab;
+      if (targetTab && validTabs.includes(targetTab)) {
+        if (targetTab !== activeTabRef.current) {
+          activeTabRef.current = targetTab;
+          setActiveTabState(targetTab);
+        }
+      } else {
+        if (activeTabRef.current !== 'dashboard') {
+          activeTabRef.current = 'dashboard';
+          setActiveTabState('dashboard');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Keep HTML class in sync with theme
   useEffect(() => {

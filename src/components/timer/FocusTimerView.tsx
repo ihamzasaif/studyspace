@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStudy } from '../../context/StudyContext';
 import { playChime, playSoftClick, startAmbientNoise, stopAmbientNoise } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 import {
   Play,
   Pause,
@@ -25,6 +26,8 @@ export const FocusTimerView: React.FC = () => {
   const [sessionCount, setSessionCount] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [ambientSound, setAmbientSound] = useState<'off' | 'brown' | 'white' | 'rain'>('off');
+
+  useBackHandler(isFullscreen, () => setIsFullscreen(false), 'timer-fullscreen');
 
   // Timer length in seconds based on settings
   const getDurationSeconds = (m: TimerMode) => {

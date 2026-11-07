@@ -4,11 +4,13 @@ import { Habit } from '../../types';
 import { calculateHabitStreak, getPastNDays, formatDateShort, addDays } from '../../utils/date';
 import { Plus, Check, Flame, Trash2, Edit2, X, Sparkles } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export const HabitsView: React.FC = () => {
   const { state, todayStr, addHabit, updateHabit, deleteHabit, toggleHabitDay } = useStudy();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  useBackHandler(isModalOpen, () => setIsModalOpen(false), 'habit-modal');
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

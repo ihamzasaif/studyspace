@@ -4,6 +4,7 @@ import { Note } from '../../types';
 import { formatDateShort } from '../../utils/date';
 import { Plus, Pin, Trash2, Edit2, Copy, Check, Search, FileText, X } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export const NotesView: React.FC = () => {
   const { state, addNote, updateNote, deleteNote, togglePinNote, getSubject } = useStudy();
@@ -15,6 +16,8 @@ export const NotesView: React.FC = () => {
   // Active note editor state
   const [activeNoteId, setActiveNoteId] = useState<string | null>(state.notes[0]?.id || null);
   const [isEditing, setIsEditing] = useState(false);
+
+  useBackHandler(isEditing, () => setIsEditing(false), 'note-editing');
 
   // Form states
   const [title, setTitle] = useState('');

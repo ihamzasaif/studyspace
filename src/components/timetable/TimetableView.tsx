@@ -4,6 +4,7 @@ import { TimetableBlock, DayOfWeek } from '../../types';
 import { getTodayString, getDayOfWeek } from '../../utils/date';
 import { Plus, Trash2, Edit2, X, Clock, Calendar as CalendarIcon, MapPin } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const DAYS: { key: DayOfWeek; label: string; full: string }[] = [
   { key: 'mon', label: 'Mon', full: 'Monday' },
@@ -45,6 +46,7 @@ export const TimetableView: React.FC = () => {
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  useBackHandler(isModalOpen, () => setIsModalOpen(false), 'timetable-modal');
   const [editingBlock, setEditingBlock] = useState<TimetableBlock | null>(null);
   const [subjectId, setSubjectId] = useState(state.subjects[0]?.id || '');
   const [day, setDay] = useState<DayOfWeek>(selectedDay);
