@@ -4,11 +4,28 @@ import {
   loginWithUsername,
   loginWithGoogle,
   sanitizeUsername,
+  createInstantAccount,
 } from '../../firebase/authService';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import { playSoftClick } from '../../utils/audio';
-import { X, Lock, User, AtSign, Briefcase, School, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  X,
+  Lock,
+  User,
+  AtSign,
+  Briefcase,
+  School,
+  AlertCircle,
+  Loader2,
+  Copy,
+  Check,
+  ExternalLink,
+  ShieldAlert,
+  Sparkles,
+} from 'lucide-react';
 import { AppAccount } from '../../types';
+
+import { useStudy } from '../../context/StudyContext';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -23,9 +40,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSuccess,
   initialMode = 'signup',
 }) => {
+  const { updateProfile } = useStudy();
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   // Form fields
   const [username, setUsername] = useState('');
@@ -39,9 +59,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  const handleCopyDomain = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(currentHost);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2000);
+    }
+  };
+
+  const handleCreateInstantFallback = () => {
+    const cleanUser = sanitizeUsername(username) || `student_${Date.now().toString().slice(-4)}`;
+    const acc = createInstantAccount({
+      username: cleanUser,
+      name: name.trim() || 'Learner',
+      password,
+      profession: profession.trim(),
+      institution: institution.trim(),
+      avatarColor,
+    });
+    updateProfile({
+      name: acc.displayName,
+      profession: acc.profession,
+      institution: acc.institution,
+      avatarColor: acc.avatarColor,
+    });
+    playSoftClick();
+    if (onSuccess) onSuccess(acc);
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsUnauthorizedDomain(false);
     setLoading(true);
 
     try {
@@ -66,11 +118,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           avatarColor,
         });
 
+        updateProfile({
+          name: acc.displayName || name.trim(),
+          profession: acc.profession || profession.trim(),
+          institution: acc.institution || institution.trim(),
+          avatarColor: acc.avatarColor || avatarColor,
+        });
+
         playSoftClick();
         if (onSuccess) onSuccess(acc);
         onClose();
       } else {
         const acc = await loginWithUsername(username, password);
+        updateProfile({
+          name: acc.displayName,
+          profession: acc.profession,
+          institution: acc.institution,
+          avatarColor: acc.avatarColor,
+        });
         playSoftClick();
         if (onSuccess) onSuccess(acc);
         onClose();
@@ -78,7 +143,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: unknown) {
       console.error('Auth error:', err);
       const msg = err instanceof Error ? err.message : 'Authentication failed. Please check credentials.';
-      if (msg.includes('auth/email-already-in-use')) {
+      if (msg.includes('auth/unauthorized-domain')) {
+        setIsUnauthorizedDomain(true);
+        setError('Firebase: Current domain is not in Authorized Domains for Google login.');
+      } else if (msg.includes('auth/operation-not-allowed')) {
+        // Automatically activate instant account so user is never blocked by disabled email provider
+        const cleanUser = sanitizeUsername(username) || `student_${Date.now().toString().slice(-4)}`;
+        const fallbackAcc = createInstantAccount({
+          username: cleanUser,
+          name: name.trim() || 'Learner',
+          password,
+          profession: profession.trim(),
+          institution: institution.trim(),
+          avatarColor,
+        });
+        updateProfile({
+          name: fallbackAcc.displayName,
+          profession: fallbackAcc.profession,
+          institution: fallbackAcc.institution,
+          avatarColor: fallbackAcc.avatarColor,
+        });
+        playSoftClick();
+        if (onSuccess) onSuccess(fallbackAcc);
+        onClose();
+        return;
+      } else if (msg.includes('auth/email-already-in-use')) {
         setError('This username is already taken. Please pick another one.');
       } else if (msg.includes('auth/invalid-credential') || msg.includes('auth/wrong-password')) {
         setError('Incorrect username or password. Please try again.');
@@ -94,15 +183,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setIsUnauthorizedDomain(false);
     setLoading(true);
     try {
       const acc = await loginWithGoogle();
+      updateProfile({
+        name: acc.displayName,
+        profession: acc.profession,
+        institution: acc.institution,
+        avatarColor: acc.avatarColor,
+      });
       playSoftClick();
       if (onSuccess) onSuccess(acc);
       onClose();
     } catch (err: unknown) {
       console.error('Google login error:', err);
-      setError(err instanceof Error ? err.message : 'Google sign-in was cancelled or failed.');
+      const msg = err instanceof Error ? err.message : 'Google sign-in was cancelled or failed.';
+      if (msg.includes('auth/unauthorized-domain')) {
+        setIsUnauthorizedDomain(true);
+        setError('Firebase unauthorized domain: Google OAuth requires adding this domain to Firebase Authorized Domains.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -128,7 +230,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {mode === 'signup' ? 'Create Study Account' : 'Welcome Back'}
               </h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                Real-time cloud sync across all your devices
+                Real-time study sync & backup across all devices
               </p>
             </div>
           </div>
@@ -148,6 +250,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={() => {
               setMode('signup');
               setError(null);
+              setIsUnauthorizedDomain(false);
             }}
             className={`flex-1 py-2 rounded-lg transition-colors text-center ${
               mode === 'signup'
@@ -162,6 +265,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={() => {
               setMode('signin');
               setError(null);
+              setIsUnauthorizedDomain(false);
             }}
             className={`flex-1 py-2 rounded-lg transition-colors text-center ${
               mode === 'signin'
@@ -173,8 +277,61 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Error Notification */}
-        {error && (
+        {/* Dedicated Authorized Domain Notice & 1-Click Fix */}
+        {isUnauthorizedDomain && (
+          <div className="p-3.5 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/70 text-xs space-y-2.5">
+            <div className="flex items-start gap-2 text-amber-900 dark:text-amber-200 font-medium">
+              <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-xs text-amber-950 dark:text-amber-100">
+                  Domain Authorization Required for Google Login
+                </p>
+                <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 mt-0.5 leading-relaxed">
+                  Firebase blocks Google Sign-In popups until your preview domain is added to Firebase Authorized Domains.
+                </p>
+              </div>
+            </div>
+
+            {/* Current domain copy box */}
+            <div className="flex items-center gap-2 p-2 bg-white/90 dark:bg-neutral-900/90 rounded-xl border border-amber-200 dark:border-neutral-700">
+              <span className="flex-1 font-mono text-[11px] text-neutral-700 dark:text-neutral-300 truncate">
+                {currentHost}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyDomain}
+                className="px-2 py-1 bg-amber-100 hover:bg-amber-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-[11px] font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1 transition-colors"
+              >
+                {copiedDomain ? <Check className="w-3 h-3 text-teal-600" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedDomain ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <a
+                href="https://console.firebase.google.com/project/gen-lang-client-0214233798/authentication/settings"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 hover:underline flex items-center gap-1"
+              >
+                <span>Open Firebase Settings</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+
+              <button
+                type="button"
+                onClick={handleCreateInstantFallback}
+                className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-semibold shadow-xs flex items-center gap-1 transition-colors"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Instant Account (Skip Domain)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Regular Error Notification */}
+        {error && !isUnauthorizedDomain && (
           <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 text-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
             <span className="break-words leading-relaxed">{error}</span>
@@ -302,12 +459,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-3 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            <span>{mode === 'signup' ? 'Create Account & Sync' : 'Sign In to Study Room'}</span>
+            <span>{mode === 'signup' ? 'Create Account & Start' : 'Sign In to Study Room'}</span>
           </button>
         </form>
+
+        {/* Instant Study Account 1-Click option */}
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={handleCreateInstantFallback}
+            className="w-full py-2 px-3 rounded-xl border border-teal-200 dark:border-teal-900/60 bg-teal-50/50 dark:bg-teal-950/30 hover:bg-teal-100/60 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+            <span>Create Instant Account without Google / Cloud setup</span>
+          </button>
+        </div>
 
         {/* Divider */}
         <div className="relative flex items-center justify-center">
@@ -322,7 +491,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           type="button"
           onClick={handleGoogleSignIn}
           disabled={loading}
-          className="w-full py-2.5 px-4 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-medium text-xs shadow-xs transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
+          className="w-full py-2.5 px-4 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-medium text-xs shadow-xs transition-colors flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
         >
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
             <path
@@ -350,7 +519,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2"
+            className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2 cursor-pointer"
           >
             Continue as Guest (Local Offline Mode)
           </button>

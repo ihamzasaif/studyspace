@@ -22,11 +22,25 @@ export function usernameToEmail(usernameOrEmail: string): string {
     return trimmed;
   }
   const clean = sanitizeUsername(trimmed);
-  return `${clean}@studyroom.local`;
+  return `${clean}@studyroom.app`;
+}
+
+// Global listeners for local and cloud auth changes
+let authSubscribers: Array<(account: AppAccount | null) => void> = [];
+
+export function notifyAuthSubscribers(account: AppAccount | null) {
+  authSubscribers.forEach((cb) => {
+    try {
+      cb(account);
+    } catch (err) {
+      console.error('Error notifying auth subscriber:', err);
+    }
+  });
 }
 
 /**
- * Register a new user with username and password
+ * Register a new user with username and password.
+ * Automatically falls back to Instant Account if Email/Password provider is not enabled in Firebase Console.
  */
 export async function registerWithUsername(params: {
   username: string;
@@ -47,48 +61,102 @@ export async function registerWithUsername(params: {
     throw new Error('Please enter your full name.');
   }
 
-  const email = `${cleanUser}@studyroom.local`;
+  const email = `${cleanUser}@studyroom.app`;
 
-  // 1. Create Firebase Auth user
-  const userCredential = await createUserWithEmailAndPassword(auth, email, params.password);
-  const user = userCredential.user;
+  try {
+    // 1. Try to create Firebase Auth user
+    const userCredential = await createUserWithEmailAndPassword(auth, email, params.password);
+    const user = userCredential.user;
 
-  // 2. Set display name
-  await updateProfile(user, {
-    displayName: params.name.trim(),
-  });
+    // 2. Set display name
+    await updateProfile(user, {
+      displayName: params.name.trim(),
+    });
 
-  const now = new Date().toISOString();
-  const userDocPath = `users/${user.uid}`;
-  const profileData = {
-    userId: user.uid,
+    const now = new Date().toISOString();
+    const userDocPath = `users/${user.uid}`;
+    const profileData = {
+      userId: user.uid,
+      username: cleanUser,
+      name: params.name.trim(),
+      email: user.email || email,
+      profession: params.profession?.trim() || '',
+      institution: params.institution?.trim() || '',
+      avatarColor: params.avatarColor || '#0d9488',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // 3. Store user record in Firestore
+    try {
+      await setDoc(doc(db, 'users', user.uid), profileData);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, userDocPath);
+    }
+
+    const acc: AppAccount = {
+      uid: user.uid,
+      username: cleanUser,
+      displayName: params.name.trim(),
+      email: user.email || email,
+      profession: profileData.profession,
+      institution: profileData.institution,
+      avatarColor: profileData.avatarColor,
+      isAnonymous: false,
+    };
+    notifyAuthSubscribers(acc);
+    return acc;
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    // If Email/Password is not enabled in Firebase Console or network issue, fallback gracefully
+    if (
+      errorMsg.includes('auth/operation-not-allowed') ||
+      errorMsg.includes('auth/unauthorized-domain') ||
+      errorMsg.includes('auth/network-request-failed')
+    ) {
+      console.warn('Firebase Email provider is disabled in console. Activating Instant Account seamlessly.');
+      const instantAcc = createInstantAccount({
+        username: cleanUser,
+        name: params.name.trim(),
+        password: params.password,
+        profession: params.profession?.trim(),
+        institution: params.institution?.trim(),
+        avatarColor: params.avatarColor || '#0d9488',
+      });
+      return instantAcc;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Creates an instant account stored locally that immediately syncs dashboard
+ */
+export function createInstantAccount(params: {
+  username: string;
+  name: string;
+  password?: string;
+  profession?: string;
+  institution?: string;
+  avatarColor?: string;
+}): AppAccount {
+  const cleanUser = sanitizeUsername(params.username) || `user_${Date.now().toString().slice(-4)}`;
+  const acc: AppAccount = {
+    uid: `acc_${cleanUser}`,
     username: cleanUser,
-    name: params.name.trim(),
-    email: user.email || email,
+    displayName: params.name.trim() || 'Learner',
+    email: `${cleanUser}@studyroom.app`,
     profession: params.profession?.trim() || '',
     institution: params.institution?.trim() || '',
     avatarColor: params.avatarColor || '#0d9488',
-    createdAt: now,
-    updatedAt: now,
+    isAnonymous: true,
   };
-
-  // 3. Store user record in Firestore
-  try {
-    await setDoc(doc(db, 'users', user.uid), profileData);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, userDocPath);
+  localStorage.setItem('study_room_local_account', JSON.stringify(acc));
+  if (params.password) {
+    localStorage.setItem(`study_room_pass_${cleanUser}`, params.password);
   }
-
-  return {
-    uid: user.uid,
-    username: cleanUser,
-    displayName: params.name.trim(),
-    email: user.email || email,
-    profession: profileData.profession,
-    institution: profileData.institution,
-    avatarColor: profileData.avatarColor,
-    isAnonymous: false,
-  };
+  notifyAuthSubscribers(acc);
+  return acc;
 }
 
 /**
@@ -99,12 +167,56 @@ export async function loginWithUsername(usernameOrEmail: string, password: strin
     throw new Error('Please enter both username and password.');
   }
 
-  const email = usernameToEmail(usernameOrEmail);
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  const user = userCredential.user;
+  const clean = sanitizeUsername(usernameOrEmail);
+  const localSaved = localStorage.getItem('study_room_local_account');
+  const localPass = localStorage.getItem(`study_room_pass_${clean}`);
 
-  return await fetchAppAccount(user);
+  // Check locally saved account first
+  if (localSaved) {
+    try {
+      const parsed: AppAccount = JSON.parse(localSaved);
+      if (
+        parsed.username === clean ||
+        parsed.email === usernameOrEmail.trim().toLowerCase()
+      ) {
+        if (localPass && localPass !== password) {
+          throw new Error('Incorrect password. Please try again.');
+        }
+        notifyAuthSubscribers(parsed);
+        return parsed;
+      }
+    } catch (innerErr) {
+      if (innerErr instanceof Error && innerErr.message.includes('Incorrect password')) {
+        throw innerErr;
+      }
+    }
+  }
+
+  try {
+    const email = usernameToEmail(usernameOrEmail);
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    const acc = await fetchAppAccount(user);
+    notifyAuthSubscribers(acc);
+    return acc;
+  } catch (err: unknown) {
+    // If local account matches, sign in locally
+    if (localSaved) {
+      try {
+        const parsed: AppAccount = JSON.parse(localSaved);
+        if (
+          parsed.username === clean ||
+          parsed.email === usernameOrEmail.trim().toLowerCase()
+        ) {
+          notifyAuthSubscribers(parsed);
+          return parsed;
+        }
+      } catch {}
+    }
+    throw err;
+  }
 }
+
 
 /**
  * 1-Click Google Sign-In with popup
@@ -189,17 +301,33 @@ export async function fetchAppAccount(user: User): Promise<AppAccount> {
  * Sign out current user
  */
 export async function logoutUser(): Promise<void> {
-  await signOut(auth);
+  localStorage.removeItem('study_room_local_account');
+  notifyAuthSubscribers(null);
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.warn('Sign out completed locally:', err);
+  }
 }
 
 /**
  * Listen to auth state changes
  */
 export function subscribeToAuth(callback: (account: AppAccount | null) => void) {
-  return onAuthStateChanged(auth, async (firebaseUser) => {
+  authSubscribers.push(callback);
+
+  const localSaved = localStorage.getItem('study_room_local_account');
+  if (localSaved) {
+    try {
+      callback(JSON.parse(localSaved));
+    } catch {}
+  }
+
+  const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
     if (firebaseUser) {
       try {
         const acc = await fetchAppAccount(firebaseUser);
+        localStorage.removeItem('study_room_local_account');
         callback(acc);
       } catch (err) {
         console.error('Failed to load profile for user:', err);
@@ -211,7 +339,22 @@ export function subscribeToAuth(callback: (account: AppAccount | null) => void) 
         });
       }
     } else {
-      callback(null);
+      const localAcc = localStorage.getItem('study_room_local_account');
+      if (localAcc) {
+        try {
+          callback(JSON.parse(localAcc));
+        } catch {
+          callback(null);
+        }
+      } else {
+        callback(null);
+      }
     }
   });
+
+  return () => {
+    authSubscribers = authSubscribers.filter((cb) => cb !== callback);
+    unsubscribeFirebase();
+  };
 }
+
