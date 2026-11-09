@@ -40,10 +40,11 @@ export function useBackHandler(
     return () => {
       window.removeEventListener('popstate', handlePopState);
 
-      // If closed manually (e.g. by pressing X or Submit) rather than browser back
+      // If closed manually (e.g. by pressing Save, Okay, X, or Submit) rather than browser back
       if (!isClosingViaPopstate.current) {
         if (window.history.state?.type === 'modal' && window.history.state?.modalId === modalId) {
-          window.history.back();
+          // Replace state back to the active tab without triggering a popstate navigation to dashboard
+          window.history.replaceState({ type: 'tab', tab: currentTab }, '', `#${currentTab}`);
         }
       }
       isClosingViaPopstate.current = false;

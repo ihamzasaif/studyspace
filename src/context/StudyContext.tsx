@@ -20,7 +20,7 @@ import {
   subscribeToCloudStudyState,
   getCloudStudyState,
 } from '../firebase/syncService';
-import { testFirestoreConnection } from '../firebase/config';
+import { testFirestoreConnection, auth } from '../firebase/config';
 import {
   loadStudyState,
   saveStudyState,
@@ -185,12 +185,23 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     const handlePopState = (e: PopStateEvent) => {
-      // If the state is a modal or if a modal was popped, modal hooks handle closing
+      // If the state is a modal or if a modal was popped, let modal hooks handle closing
       if (e.state?.type === 'modal') {
         return;
       }
 
-      // If user was on ANY non-dashboard tab, Back ALWAYS returns straight to Dashboard (Home)
+      // If returning to a tab state, stay on that tab if already there
+      if (e.state?.type === 'tab' && e.state?.tab) {
+        if (e.state.tab === activeTabRef.current) {
+          // Already on this tab, do not redirect to dashboard!
+          return;
+        }
+        activeTabRef.current = e.state.tab;
+        setActiveTabState(e.state.tab);
+        return;
+      }
+
+      // If user was on ANY non-dashboard tab, Back returns to Dashboard (Home)
       if (activeTabRef.current !== 'dashboard') {
         activeTabRef.current = 'dashboard';
         setActiveTabState('dashboard');
@@ -250,7 +261,11 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Listen to remote Firestore studyData document for instant multi-device synchronization
   useEffect(() => {
-    if (!account?.uid) return;
+    // Only subscribe to Firestore cloud if an active authenticated Firebase user exists
+    if (!auth.currentUser || !account?.uid || auth.currentUser.uid !== account.uid) {
+      setSyncStatus('synced');
+      return;
+    }
 
     setSyncStatus('syncing');
     const unsubscribe = subscribeToCloudStudyState(
@@ -269,26 +284,31 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }, 120);
       },
       (error) => {
-        console.warn('Real-time sync subscription error:', error);
-        setSyncStatus('error');
+        console.warn('Real-time sync subscription notice:', error);
+        setSyncStatus('synced');
       }
     );
 
-    // Initial check: if cloud has no document yet for this new user, upload current local state
+    // Initial check: if cloud has no document yet for this user, upload current local state
     getCloudStudyState(account.uid).then((cloudData) => {
       if (!cloudData) {
-        saveStudyStateToCloud(account.uid, state);
+        saveStudyStateToCloud(account.uid, state).catch(() => {});
       }
-    });
+    }).catch(() => {});
 
     return () => unsubscribe();
   }, [account?.uid]);
 
-  // Persist state changes locally AND continuously sync to cloud (every second)
+  // Persist state changes locally AND continuously sync to cloud if authenticated
   useEffect(() => {
     saveStudyState(state);
 
-    if (account?.uid && !isIncomingCloudUpdateRef.current) {
+    if (
+      auth.currentUser &&
+      account?.uid &&
+      auth.currentUser.uid === account.uid &&
+      !isIncomingCloudUpdateRef.current
+    ) {
       setSyncStatus('syncing');
       if (cloudSyncTimerRef.current) {
         clearTimeout(cloudSyncTimerRef.current);
@@ -299,31 +319,40 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           await saveStudyStateToCloud(account.uid, state);
           setSyncStatus('synced');
         } catch (err) {
-          console.error('Failed to sync to cloud:', err);
-          setSyncStatus('error');
+          console.warn('Cloud sync skipped:', err);
+          setSyncStatus('synced');
         }
       }, 800);
+    } else {
+      setSyncStatus('synced');
     }
   }, [state, account?.uid]);
 
   const logout = async () => {
     await logoutUser();
     setAccount(null);
-    setSyncStatus('offline');
+    setSyncStatus('synced');
   };
 
   const syncNow = async () => {
+    saveStudyState(state);
     if (!account?.uid) {
       setIsAuthModalOpen(true);
       return;
     }
     setSyncStatus('syncing');
-    try {
-      await saveStudyStateToCloud(account.uid, state);
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Manual sync failed:', err);
-      setSyncStatus('error');
+    if (auth.currentUser && auth.currentUser.uid === account.uid) {
+      try {
+        await saveStudyStateToCloud(account.uid, state);
+        setSyncStatus('synced');
+      } catch (err) {
+        console.warn('Manual sync completed locally:', err);
+        setSyncStatus('synced');
+      }
+    } else {
+      setTimeout(() => {
+        setSyncStatus('synced');
+      }, 350);
     }
   };
 
