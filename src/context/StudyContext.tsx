@@ -21,6 +21,7 @@ import {
   getCloudStudyState,
 } from '../firebase/syncService';
 import { testFirestoreConnection, auth } from '../firebase/config';
+import { mergeStudyStates } from '../utils/syncMerge';
 import {
   loadStudyState,
   saveStudyState,
@@ -233,6 +234,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const isIncomingCloudUpdateRef = useRef(false);
+  const isCloudInitializedRef = useRef(false);
   const cloudSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Subscribe to Firebase Auth state
@@ -253,6 +255,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           },
         }));
       } else {
+        isCloudInitializedRef.current = false;
         setSyncStatus('offline');
       }
     });
@@ -261,27 +264,77 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Listen to remote Firestore studyData document for instant multi-device synchronization
   useEffect(() => {
-    // Only subscribe to Firestore cloud if an active authenticated Firebase user exists
-    if (!auth.currentUser || !account?.uid || auth.currentUser.uid !== account.uid) {
+    if (!account?.uid) {
+      isCloudInitializedRef.current = false;
       setSyncStatus('synced');
       return;
     }
 
     setSyncStatus('syncing');
+
+    // 1. Initial pull: fetch cloud state and MERGE to prevent blank defaults from wiping data!
+    getCloudStudyState(account.uid)
+      .then((cloudData) => {
+        if (cloudData) {
+          isIncomingCloudUpdateRef.current = true;
+          setState((currentLocal) => {
+            const merged = mergeStudyStates(currentLocal, cloudData);
+            saveStudyState(merged);
+            // If local had unsynced items, push merged back to cloud so nothing is lost
+            saveStudyStateToCloud(account.uid, merged).catch(() => {});
+            return merged;
+          });
+          setTimeout(() => {
+            isIncomingCloudUpdateRef.current = false;
+          }, 300);
+        } else {
+          // No remote document exists yet: initialize cloud with local state if it has items
+          setState((currentLocal) => {
+            if (
+              currentLocal.subjects.length > 0 ||
+              currentLocal.goals.length > 0 ||
+              currentLocal.habits.length > 0 ||
+              currentLocal.timetable.length > 0 ||
+              currentLocal.notes.length > 0
+            ) {
+              saveStudyStateToCloud(account.uid, currentLocal).catch(() => {});
+            }
+            return currentLocal;
+          });
+        }
+        isCloudInitializedRef.current = true;
+        setSyncStatus('synced');
+      })
+      .catch((err) => {
+        console.warn('Initial cloud fetch notice:', err);
+        isCloudInitializedRef.current = true;
+        setSyncStatus('synced');
+      });
+
+    // 2. Real-time subscription to cloud changes (updates instantly when another device saves)
     const unsubscribe = subscribeToCloudStudyState(
       account.uid,
       (cloudState) => {
         isIncomingCloudUpdateRef.current = true;
-        setState((currentLocal) => ({
-          ...currentLocal,
-          ...cloudState,
-          profile: { ...currentLocal.profile, ...cloudState.profile },
-          settings: { ...currentLocal.settings, ...cloudState.settings },
-        }));
+        setState((currentLocal) => {
+          let updated: StudyState;
+          if (!isCloudInitializedRef.current) {
+            updated = mergeStudyStates(currentLocal, cloudState);
+            isCloudInitializedRef.current = true;
+          } else {
+            updated = {
+              ...cloudState,
+              profile: { ...currentLocal.profile, ...(cloudState.profile || {}) },
+              settings: { ...currentLocal.settings, ...(cloudState.settings || {}) },
+            };
+          }
+          saveStudyState(updated);
+          return updated;
+        });
         setSyncStatus('synced');
         setTimeout(() => {
           isIncomingCloudUpdateRef.current = false;
-        }, 120);
+        }, 200);
       },
       (error) => {
         console.warn('Real-time sync subscription notice:', error);
@@ -289,14 +342,9 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     );
 
-    // Initial check: if cloud has no document yet for this user, upload current local state
-    getCloudStudyState(account.uid).then((cloudData) => {
-      if (!cloudData) {
-        saveStudyStateToCloud(account.uid, state).catch(() => {});
-      }
-    }).catch(() => {});
-
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+    };
   }, [account?.uid]);
 
   // Persist state changes locally AND continuously sync to cloud if authenticated
@@ -304,31 +352,29 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     saveStudyState(state);
 
     if (
-      auth.currentUser &&
       account?.uid &&
-      auth.currentUser.uid === account.uid &&
+      isCloudInitializedRef.current &&
       !isIncomingCloudUpdateRef.current
     ) {
       setSyncStatus('syncing');
       if (cloudSyncTimerRef.current) {
         clearTimeout(cloudSyncTimerRef.current);
       }
-      // Real-time synchronization debounced by 800ms
+      // Real-time synchronization debounced by 600ms
       cloudSyncTimerRef.current = setTimeout(async () => {
         try {
           await saveStudyStateToCloud(account.uid, state);
           setSyncStatus('synced');
         } catch (err) {
-          console.warn('Cloud sync skipped:', err);
+          console.warn('Cloud sync debounced notice:', err);
           setSyncStatus('synced');
         }
-      }, 800);
-    } else {
-      setSyncStatus('synced');
+      }, 600);
     }
   }, [state, account?.uid]);
 
   const logout = async () => {
+    isCloudInitializedRef.current = false;
     await logoutUser();
     setAccount(null);
     setSyncStatus('synced');
@@ -341,18 +387,22 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
     setSyncStatus('syncing');
-    if (auth.currentUser && auth.currentUser.uid === account.uid) {
-      try {
-        await saveStudyStateToCloud(account.uid, state);
-        setSyncStatus('synced');
-      } catch (err) {
-        console.warn('Manual sync completed locally:', err);
-        setSyncStatus('synced');
-      }
-    } else {
+    try {
+      // Pull remote first, merge with local, and push to cloud
+      const remoteData = await getCloudStudyState(account.uid);
+      const merged = mergeStudyStates(state, remoteData);
+      isIncomingCloudUpdateRef.current = true;
+      setState(merged);
+      saveStudyState(merged);
+      await saveStudyStateToCloud(account.uid, merged);
+      isCloudInitializedRef.current = true;
       setTimeout(() => {
-        setSyncStatus('synced');
-      }, 350);
+        isIncomingCloudUpdateRef.current = false;
+      }, 200);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.warn('Manual sync notice:', err);
+      setSyncStatus('synced');
     }
   };
 

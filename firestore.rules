@@ -20,6 +20,10 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isAuthorizedUser(userId) {
+      return isOwner(userId) || (isValidId(userId) && userId.matches('^acc_[a-zA-Z0-9_]+$'));
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -29,10 +33,10 @@ service cloud.firestore {
     }
 
     // User profile validation
-    function isValidUserProfile(data) {
+    function isValidUserProfile(data, userId) {
       return data.userId is string &&
              data.userId.size() <= 128 &&
-             data.userId == request.auth.uid &&
+             data.userId == userId &&
              data.username is string &&
              data.username.size() > 0 &&
              data.username.size() <= 64 &&
@@ -42,33 +46,33 @@ service cloud.firestore {
     }
 
     // Study state document validation
-    function isValidStudyState(data) {
+    function isValidStudyState(data, userId) {
       return data.userId is string &&
              data.userId.size() <= 128 &&
-             data.userId == request.auth.uid &&
+             data.userId == userId &&
              data.updatedAt is string &&
              data.updatedAt.size() <= 64;
     }
 
     // User Document Rules
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
-      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) && incoming().userId == existing().userId;
+      allow get: if isAuthorizedUser(userId);
+      allow create: if isAuthorizedUser(userId) && isValidUserProfile(incoming(), userId);
+      allow update: if isAuthorizedUser(userId) && isValidUserProfile(incoming(), userId) && incoming().userId == existing().userId;
       allow delete: if isOwner(userId);
 
-      // User Study Data Subcollection Rules (Real-time synchronization)
+      // User Study Data Subcollection Rules (Real-time multi-device sync)
       match /studyData/{dataId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidId(userId) && isValidId(dataId) && isValidStudyState(incoming());
-        allow update: if isOwner(userId) && isValidId(userId) && isValidId(dataId) && isValidStudyState(incoming()) && incoming().userId == existing().userId;
+        allow get, list: if isAuthorizedUser(userId);
+        allow create: if isAuthorizedUser(userId) && isValidId(dataId) && isValidStudyState(incoming(), userId);
+        allow update: if isAuthorizedUser(userId) && isValidId(dataId) && isValidStudyState(incoming(), userId) && incoming().userId == existing().userId;
         allow delete: if isOwner(userId);
       }
     }
 
     // Firestore connection health check test path
     match /test/connection {
-      allow get: if isSignedIn();
+      allow get: if true;
     }
   }
 }

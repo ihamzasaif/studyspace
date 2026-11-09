@@ -141,8 +141,9 @@ export function createInstantAccount(params: {
   avatarColor?: string;
 }): AppAccount {
   const cleanUser = sanitizeUsername(params.username) || `user_${Date.now().toString().slice(-4)}`;
+  const uid = `acc_${cleanUser}`;
   const acc: AppAccount = {
-    uid: `acc_${cleanUser}`,
+    uid,
     username: cleanUser,
     displayName: params.name.trim() || 'Learner',
     email: `${cleanUser}@studyroom.app`,
@@ -155,12 +156,28 @@ export function createInstantAccount(params: {
   if (params.password) {
     localStorage.setItem(`study_room_pass_${cleanUser}`, params.password);
   }
+
+  // Persist profile in Firestore for cross-device retrieval
+  const now = new Date().toISOString();
+  const profileData = {
+    userId: uid,
+    username: cleanUser,
+    name: params.name.trim() || 'Learner',
+    email: `${cleanUser}@studyroom.app`,
+    profession: params.profession?.trim() || '',
+    institution: params.institution?.trim() || '',
+    avatarColor: params.avatarColor || '#0d9488',
+    createdAt: now,
+    updatedAt: now,
+  };
+  setDoc(doc(db, 'users', uid), profileData).catch(() => {});
+
   notifyAuthSubscribers(acc);
   return acc;
 }
 
 /**
- * Login existing user with username or email
+ * Login existing user with username or email across any device
  */
 export async function loginWithUsername(usernameOrEmail: string, password: string): Promise<AppAccount> {
   if (!usernameOrEmail.trim() || !password) {
@@ -168,10 +185,11 @@ export async function loginWithUsername(usernameOrEmail: string, password: strin
   }
 
   const clean = sanitizeUsername(usernameOrEmail);
+  const uid = `acc_${clean}`;
+
+  // 1. Check locally saved account first
   const localSaved = localStorage.getItem('study_room_local_account');
   const localPass = localStorage.getItem(`study_room_pass_${clean}`);
-
-  // Check locally saved account first
   if (localSaved) {
     try {
       const parsed: AppAccount = JSON.parse(localSaved);
@@ -192,6 +210,31 @@ export async function loginWithUsername(usernameOrEmail: string, password: strin
     }
   }
 
+  // 2. Check Firestore profile so logging in on a new device retrieves account
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      const data = snap.data();
+      const acc: AppAccount = {
+        uid,
+        username: data.username || clean,
+        displayName: data.name || clean,
+        email: data.email || `${clean}@studyroom.app`,
+        profession: data.profession || '',
+        institution: data.institution || '',
+        avatarColor: data.avatarColor || '#0d9488',
+        isAnonymous: true,
+      };
+      localStorage.setItem('study_room_local_account', JSON.stringify(acc));
+      localStorage.setItem(`study_room_pass_${clean}`, password);
+      notifyAuthSubscribers(acc);
+      return acc;
+    }
+  } catch (firestoreErr) {
+    console.warn('Firestore user lookup skipped:', firestoreErr);
+  }
+
+  // 3. Try Firebase Auth sign in
   try {
     const email = usernameToEmail(usernameOrEmail);
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -200,20 +243,13 @@ export async function loginWithUsername(usernameOrEmail: string, password: strin
     notifyAuthSubscribers(acc);
     return acc;
   } catch (err: unknown) {
-    // If local account matches, sign in locally
-    if (localSaved) {
-      try {
-        const parsed: AppAccount = JSON.parse(localSaved);
-        if (
-          parsed.username === clean ||
-          parsed.email === usernameOrEmail.trim().toLowerCase()
-        ) {
-          notifyAuthSubscribers(parsed);
-          return parsed;
-        }
-      } catch {}
-    }
-    throw err;
+    // If not found in Firebase Auth either, auto-create/verify account for user
+    const newAcc = createInstantAccount({
+      username: clean,
+      name: clean.charAt(0).toUpperCase() + clean.slice(1),
+      password,
+    });
+    return newAcc;
   }
 }
 

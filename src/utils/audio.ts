@@ -1,17 +1,19 @@
 /**
  * Web Audio API synthesizer for calm study chimes and ambient study sounds.
- * Avoids any external audio file 404s or network lag.
+ * Fully self-contained, zero external audio dependencies or network latency.
  */
 
 let audioCtx: AudioContext | null = null;
 
-function getAudioContext(): AudioContext {
+export function getAudioContext(): AudioContext {
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     audioCtx = new AudioContextClass();
   }
   if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
   }
   return audioCtx;
 }
@@ -22,6 +24,9 @@ function getAudioContext(): AudioContext {
 export function playChime() {
   try {
     const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
     const now = ctx.currentTime;
 
     const notes = [659.25, 830.61, 987.77]; // E5, G#5, B5 (Warm major triad)
@@ -32,9 +37,9 @@ export function playChime() {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + idx * 0.12);
 
-      // Envelope: smooth attack, gentle exponential decay
+      // Smooth attack, gentle exponential decay
       gain.gain.setValueAtTime(0.0001, now + idx * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.18, now + idx * 0.12 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.2, now + idx * 0.12 + 0.04);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.12 + 1.2);
 
       osc.connect(gain);
@@ -54,6 +59,9 @@ export function playChime() {
 export function playSoftClick() {
   try {
     const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -62,7 +70,7 @@ export function playSoftClick() {
     osc.frequency.setValueAtTime(440, now);
     osc.frequency.exponentialRampToValueAtTime(220, now + 0.05);
 
-    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.setValueAtTime(0.06, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
 
     osc.connect(gain);
@@ -75,88 +83,157 @@ export function playSoftClick() {
   }
 }
 
-// Ambient Noise Generator (Brown / White / Rain)
-let noiseNode: AudioNode | null = null;
-let noiseGainNode: GainNode | null = null;
+// Ambient Noise Generator (Brown / White / Rain / Waves)
+let currentSourceNode: AudioBufferSourceNode | null = null;
+let currentGainNode: GainNode | null = null;
+let lfoOsc: OscillatorNode | null = null;
 
 export function stopAmbientNoise() {
-  if (noiseGainNode && audioCtx) {
-    noiseGainNode.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+  if (currentGainNode && audioCtx) {
+    try {
+      const now = audioCtx.currentTime;
+      currentGainNode.gain.cancelScheduledValues(now);
+      currentGainNode.gain.setValueAtTime(currentGainNode.gain.value, now);
+      currentGainNode.gain.linearRampToValueAtTime(0.0001, now + 0.25);
+    } catch {
+      // ignore
+    }
+  }
+
+  const oldSource = currentSourceNode;
+  const oldLfo = lfoOsc;
+  currentSourceNode = null;
+  currentGainNode = null;
+  lfoOsc = null;
+
+  if (oldSource) {
     setTimeout(() => {
       try {
-        if (noiseNode) {
-          (noiseNode as AudioBufferSourceNode).stop();
-          noiseNode.disconnect();
-          noiseNode = null;
+        oldSource.stop();
+        oldSource.disconnect();
+        if (oldLfo) {
+          oldLfo.stop();
+          oldLfo.disconnect();
         }
       } catch {
         // ignore
       }
-    }, 550);
+    }, 280);
   }
 }
 
-export function startAmbientNoise(type: 'brown' | 'white' | 'rain') {
+export function startAmbientNoise(type: 'brown' | 'white' | 'rain' | 'waves', volume: number = 0.25) {
+  // Stop existing sound smoothly
   stopAmbientNoise();
 
   try {
     const ctx = getAudioContext();
-    const bufferSize = 2 * ctx.sampleRate;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = buffer.getChannelData(0);
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    // 5 seconds of stereo noise for rich looping texture
+    const sampleRate = ctx.sampleRate;
+    const bufferSize = 5 * sampleRate;
+    const buffer = ctx.createBuffer(2, bufferSize, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
 
     if (type === 'white') {
       for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
+        left[i] = (Math.random() * 2 - 1) * 0.4;
+        right[i] = (Math.random() * 2 - 1) * 0.4;
       }
     } else if (type === 'brown') {
-      let lastOut = 0.0;
+      // Deep warm brownian noise
+      let lastLeft = 0.0;
+      let lastRight = 0.0;
       for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        output[i] = (lastOut + 0.02 * white) / 1.02;
-        lastOut = output[i];
-        output[i] *= 3.5; // Gain compensation
+        const whiteL = Math.random() * 2 - 1;
+        const whiteR = Math.random() * 2 - 1;
+        lastLeft = (lastLeft + 0.04 * whiteL) / 1.04;
+        lastRight = (lastRight + 0.04 * whiteR) / 1.04;
+        left[i] = lastLeft * 4.2;
+        right[i] = lastRight * 4.2;
       }
     } else if (type === 'rain') {
-      // Pinkish noise with low-pass filter
-      let b0 = 0, b1 = 0, b2 = 0;
+      // Pinkish rain with random drop fluctuations
+      let b0L = 0, b1L = 0, b2L = 0;
+      let b0R = 0, b1R = 0, b2R = 0;
       for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        b0 = 0.99886 * b0 + white * 0.0555179;
-        b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        output[i] = (b0 + b1 + b2 + white * 0.5362) * 0.3;
+        const whiteL = Math.random() * 2 - 1;
+        const whiteR = Math.random() * 2 - 1;
+        b0L = 0.99886 * b0L + whiteL * 0.0555179;
+        b1L = 0.99332 * b1L + whiteL * 0.0750759;
+        b2L = 0.96900 * b2L + whiteL * 0.1538520;
+        left[i] = (b0L + b1L + b2L + whiteL * 0.5362) * 0.45;
+
+        b0R = 0.99886 * b0R + whiteR * 0.0555179;
+        b1R = 0.99332 * b1R + whiteR * 0.0750759;
+        b2R = 0.96900 * b2R + whiteR * 0.1538520;
+        right[i] = (b0R + b1R + b2R + whiteR * 0.5362) * 0.45;
+      }
+    } else if (type === 'waves') {
+      // Ocean waves: Brownian baseline
+      let lastLeft = 0.0;
+      let lastRight = 0.0;
+      for (let i = 0; i < bufferSize; i++) {
+        const whiteL = Math.random() * 2 - 1;
+        const whiteR = Math.random() * 2 - 1;
+        lastLeft = (lastLeft + 0.035 * whiteL) / 1.035;
+        lastRight = (lastRight + 0.035 * whiteR) / 1.035;
+        left[i] = lastLeft * 4.5;
+        right[i] = lastRight * 4.5;
       }
     }
 
-    const whiteNoise = ctx.createBufferSource();
-    whiteNoise.buffer = buffer;
-    whiteNoise.loop = true;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
 
+    // Filters for natural timbre
     const filter = ctx.createBiquadFilter();
     if (type === 'brown') {
       filter.type = 'lowpass';
-      filter.frequency.value = 400;
+      filter.frequency.setValueAtTime(450, ctx.currentTime);
+      filter.Q.setValueAtTime(0.8, ctx.currentTime);
     } else if (type === 'rain') {
       filter.type = 'lowpass';
-      filter.frequency.value = 850;
+      filter.frequency.setValueAtTime(1100, ctx.currentTime);
+      filter.Q.setValueAtTime(0.5, ctx.currentTime);
+    } else if (type === 'waves') {
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(650, ctx.currentTime);
     } else {
       filter.type = 'lowpass';
-      filter.frequency.value = 2500;
+      filter.frequency.setValueAtTime(3200, ctx.currentTime);
     }
 
     const gainNode = ctx.createGain();
-    gainNode.gain.setValueAtTime(0.001, ctx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 1.0); // Soft, non-intrusive volume
+    const targetGain = Math.max(0.08, Math.min(volume, 0.45));
+    gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(targetGain, ctx.currentTime + 0.5);
 
-    whiteNoise.connect(filter);
+    // If ocean waves, add a slow LFO for wave ebb and flow
+    if (type === 'waves') {
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.frequency.setValueAtTime(0.12, ctx.currentTime); // ~8 second wave cycle
+      lfoGain.gain.setValueAtTime(0.35 * targetGain, ctx.currentTime);
+      lfo.connect(lfoGain);
+      lfoGain.connect(gainNode.gain);
+      lfo.start();
+      lfoOsc = lfo;
+    }
+
+    source.connect(filter);
     filter.connect(gainNode);
     gainNode.connect(ctx.destination);
 
-    whiteNoise.start(0);
-    noiseNode = whiteNoise;
-    noiseGainNode = gainNode;
-  } catch {
-    // User might need to interact first
+    source.start(0);
+    currentSourceNode = source;
+    currentGainNode = gainNode;
+  } catch (err) {
+    console.warn('Ambient noise playback error:', err);
   }
 }

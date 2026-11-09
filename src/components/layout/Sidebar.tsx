@@ -45,7 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings, onOpenProfile 
   ];
 
   return (
-    <aside className="hidden xl:flex flex-col w-64 h-screen shrink-0 bg-white dark:bg-[#16181D] border-r border-neutral-200/80 dark:border-neutral-800/80 select-none transition-colors">
+    <aside className="hidden 2xl:flex flex-col w-64 h-screen shrink-0 bg-white dark:bg-[#16181D] border-r border-neutral-200/80 dark:border-neutral-800/80 select-none transition-colors">
       {/* Brand Header */}
       <div className="flex items-center justify-between px-6 h-18 border-b border-neutral-200/60 dark:border-neutral-800/60">
         <div className="flex items-center gap-3">

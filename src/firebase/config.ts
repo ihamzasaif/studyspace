@@ -65,9 +65,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
  */
 export async function testFirestoreConnection() {
   try {
-    if (auth.currentUser) {
-      await getDocFromServer(doc(db, 'test', 'connection'));
-    }
+    await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firestore is running in offline cached mode.');

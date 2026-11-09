@@ -46,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between px-6 lg:px-8 py-3.5 bg-[#F8F9FA]/90 dark:bg-[#121417]/90 backdrop-blur-md border-b border-neutral-200/60 dark:border-neutral-800/60 transition-colors">
+    <header className="sticky top-0 z-30 flex items-center justify-between px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 bg-[#F8F9FA]/90 dark:bg-[#121417]/90 backdrop-blur-md border-b border-neutral-200/60 dark:border-neutral-800/60 transition-colors">
       {/* Left Title / Breadcrumb */}
       <div className="flex items-center gap-3">
         <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100 tracking-tight">

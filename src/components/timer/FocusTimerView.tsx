@@ -25,7 +25,8 @@ export const FocusTimerView: React.FC = () => {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(state.subjects[0]?.id || '');
   const [sessionCount, setSessionCount] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [ambientSound, setAmbientSound] = useState<'off' | 'brown' | 'white' | 'rain'>('off');
+  const [ambientSound, setAmbientSound] = useState<'off' | 'brown' | 'white' | 'rain' | 'waves'>('off');
+  const [ambientVolume, setAmbientVolume] = useState<number>(0.28);
 
   useBackHandler(isFullscreen, () => setIsFullscreen(false), 'timer-fullscreen');
 
@@ -131,12 +132,12 @@ export const FocusTimerView: React.FC = () => {
     setTimeLeft(getDurationSeconds(newMode));
   };
 
-  const handleAmbientChange = (type: 'off' | 'brown' | 'white' | 'rain') => {
+  const handleAmbientChange = (type: 'off' | 'brown' | 'white' | 'rain' | 'waves', vol: number = ambientVolume) => {
     setAmbientSound(type);
     if (type === 'off') {
       stopAmbientNoise();
     } else {
-      startAmbientNoise(type);
+      startAmbientNoise(type, vol);
     }
   };
 
@@ -336,24 +337,63 @@ export const FocusTimerView: React.FC = () => {
         </div>
 
         {/* Ambient Sound Controller */}
-        <div className="flex items-center gap-3 mt-8 pt-6 border-t border-neutral-100 dark:border-neutral-800 w-full justify-center flex-wrap">
-          <span className="text-xs text-neutral-500 flex items-center gap-1.5 font-medium">
-            <Volume2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-            <span>Calm Background Noise:</span>
-          </span>
+        <div className="flex flex-col items-center gap-2.5 mt-8 pt-6 border-t border-neutral-100 dark:border-neutral-800 w-full">
+          <div className="flex items-center justify-between w-full max-w-sm px-1">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 font-medium">
+              {ambientSound !== 'off' ? (
+                <Volume2 className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
+              ) : (
+                <VolumeX className="w-4 h-4 text-neutral-400" />
+              )}
+              <span>Calm Background Noise</span>
+              {ambientSound !== 'off' && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">
+                  Active
+                </span>
+              )}
+            </span>
 
-          <div className="flex items-center gap-1">
-            {(['off', 'brown', 'white', 'rain'] as const).map((soundType) => (
+            {/* Volume slider when active */}
+            {ambientSound !== 'off' && (
+              <div className="flex items-center gap-1.5">
+                <Volume1 className="w-3 h-3 text-neutral-400" />
+                <input
+                  type="range"
+                  min="0.08"
+                  max="0.45"
+                  step="0.02"
+                  value={ambientVolume}
+                  onChange={(e) => {
+                    const newVol = parseFloat(e.target.value);
+                    setAmbientVolume(newVol);
+                    startAmbientNoise(ambientSound, newVol);
+                  }}
+                  className="w-16 h-1 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-teal-600"
+                  title="Noise Volume"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            {([
+              { key: 'off', label: 'Mute' },
+              { key: 'brown', label: 'Brown Noise' },
+              { key: 'rain', label: 'Rain' },
+              { key: 'waves', label: 'Ocean Waves' },
+              { key: 'white', label: 'White Noise' },
+            ] as const).map(({ key, label }) => (
               <button
-                key={soundType}
-                onClick={() => handleAmbientChange(soundType)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-lg capitalize transition-colors ${
-                  ambientSound === soundType
-                    ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
+                key={key}
+                type="button"
+                onClick={() => handleAmbientChange(key)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all cursor-pointer ${
+                  ambientSound === key
+                    ? 'bg-teal-700 text-white shadow-xs font-semibold scale-102'
+                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700/60'
                 }`}
               >
-                {soundType === 'off' ? 'Mute' : soundType}
+                {label}
               </button>
             ))}
           </div>
