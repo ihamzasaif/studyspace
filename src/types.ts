@@ -116,3 +116,16 @@ export type ActiveTab =
   | 'stats'
   | 'profile';
 
+export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error';
+
+export interface AppAccount {
+  uid: string;
+  username: string;
+  displayName: string;
+  email: string;
+  profession?: string;
+  institution?: string;
+  avatarColor?: string;
+  isAnonymous?: boolean;
+}
+

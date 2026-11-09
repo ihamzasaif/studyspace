@@ -38,6 +38,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
     toggleGoal,
     addGoal,
     getSubject,
+    account,
+    openAuthModal,
   } = useStudy();
 
   const [quoteIndex] = useState(() => Math.floor(Math.random() * MOTIVATIONAL_LINES.length));
@@ -126,16 +128,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
           )}
         </div>
 
-        {/* Profile Setup Reminder or Exam Countdown Card */}
+        {/* Account Sync CTA or Profile Setup Reminder or Exam Countdown Card */}
         <div className="flex items-center gap-2 flex-wrap">
-          {!hasProfile && (
+          {!account ? (
+            <button
+              onClick={openAuthModal}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span>Create Account / Sync</span>
+            </button>
+          ) : !hasProfile ? (
             <button
               onClick={onOpenProfile}
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 text-xs font-semibold hover:bg-teal-100 transition-colors shrink-0"
             >
               <span>+ Setup Your Profile</span>
             </button>
-          )}
+          ) : null}
 
           {state.examCountdown ? (
             <div className="flex items-center gap-4 px-4 py-3 bg-white dark:bg-[#1A1D23] rounded-2xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs shrink-0">

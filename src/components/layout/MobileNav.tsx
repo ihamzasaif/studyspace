@@ -25,7 +25,7 @@ interface MobileNavProps {
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProfile }) => {
-  const { state, activeTab, setActiveTab, theme, toggleTheme } = useStudy();
+  const { state, activeTab, setActiveTab, theme, toggleTheme, account, openAuthModal } = useStudy();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   useBackHandler(isMoreOpen, () => setIsMoreOpen(false), 'mobile-more-drawer');
@@ -80,28 +80,45 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProf
             </div>
 
             {/* Profile banner inside drawer */}
-            <button
-              onClick={() => {
-                setIsMoreOpen(false);
-                onOpenProfile();
-              }}
-              className="w-full text-left p-3 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 flex items-center gap-3"
-            >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs"
-                style={{ backgroundColor: state.profile.avatarColor || '#0d9488' }}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setIsMoreOpen(false);
+                  onOpenProfile();
+                }}
+                className="flex-1 text-left p-3 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 flex items-center gap-3"
               >
-                {state.profile.name ? state.profile.name[0].toUpperCase() : 'U'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-teal-900 dark:text-teal-200 break-words leading-tight">
-                  {state.profile.name || 'Setup Your Profile'}
-                </p>
-                <p className="text-[11px] text-teal-700/80 dark:text-teal-400 break-words mt-0.5 leading-tight">
-                  {state.profile.profession || 'Set name, profession & target'}
-                </p>
-              </div>
-            </button>
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0"
+                  style={{ backgroundColor: account?.avatarColor || state.profile.avatarColor || '#0d9488' }}
+                >
+                  {account?.displayName ? account.displayName[0].toUpperCase() : (state.profile.name ? state.profile.name[0].toUpperCase() : 'S')}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-teal-900 dark:text-teal-200 break-words leading-tight">
+                      {account?.displayName || state.profile.name || 'Setup Profile'}
+                    </p>
+                    {account && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
+                  </div>
+                  <p className="text-[11px] text-teal-700/80 dark:text-teal-400 break-words mt-0.5 leading-tight">
+                    {account ? `@${account.username}` : (state.profile.profession || 'Tap to edit profile')}
+                  </p>
+                </div>
+              </button>
+
+              {!account && (
+                <button
+                  onClick={() => {
+                    setIsMoreOpen(false);
+                    openAuthModal();
+                  }}
+                  className="px-3 py-3 rounded-xl bg-teal-600 text-white text-xs font-semibold shadow-xs shrink-0"
+                >
+                  Sync
+                </button>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-2">
               {moreItems.map((item) => {

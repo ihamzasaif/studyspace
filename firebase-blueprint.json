@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile information",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user",
+          "maxLength": 128
+        },
+        "username": {
+          "type": "string",
+          "description": "The unique username chosen by the user",
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "description": "The display name of the user",
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "description": "The user email or account identifier",
+          "maxLength": 160
+        },
+        "profession": {
+          "type": "string",
+          "description": "Profession or study field",
+          "maxLength": 100
+        },
+        "institution": {
+          "type": "string",
+          "description": "School, College, or University",
+          "maxLength": 120
+        },
+        "avatarColor": {
+          "type": "string",
+          "description": "Hex color code for avatar badge",
+          "maxLength": 16
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of user creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of user profile update"
+        }
+      },
+      "required": ["userId", "username", "name"]
+    },
+    "StudyState": {
+      "title": "StudyState",
+      "description": "Complete real-time study dashboard data synchronized across all devices",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "subjects": {
+          "type": "array",
+          "description": "List of user subjects"
+        },
+        "goals": {
+          "type": "array",
+          "description": "List of daily goals"
+        },
+        "timetable": {
+          "type": "array",
+          "description": "Weekly timetable blocks"
+        },
+        "habits": {
+          "type": "array",
+          "description": "Daily habit definitions"
+        },
+        "habitLogs": {
+          "type": "array",
+          "description": "Habit check-off history"
+        },
+        "studySessions": {
+          "type": "array",
+          "description": "Logged focus sessions and timer entries"
+        },
+        "notes": {
+          "type": "array",
+          "description": "Quick pad notes"
+        },
+        "examCountdown": {
+          "type": "object",
+          "description": "Target exam countdown information"
+        },
+        "settings": {
+          "type": "object",
+          "description": "User preferences and timer settings"
+        },
+        "profile": {
+          "type": "object",
+          "description": "Study profile metrics and goals"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Server or client sync timestamp"
+        }
+      },
+      "required": ["userId", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Stores individual user account profile documents"
+    },
+    "/users/{userId}/studyData/{dataId}": {
+      "schema": "StudyState",
+      "description": "Stores real-time synchronized study state for the user"
+    }
+  }
+}

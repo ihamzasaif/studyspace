@@ -10,7 +10,19 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile }) => {
-  const { state, activeTab, setActiveTab, todayStr, theme, toggleTheme, todayStudyMinutes } = useStudy();
+  const {
+    state,
+    activeTab,
+    setActiveTab,
+    todayStr,
+    theme,
+    toggleTheme,
+    todayStudyMinutes,
+    account,
+    syncStatus,
+    syncNow,
+    openAuthModal,
+  } = useStudy();
 
   const tabTitles: Record<string, string> = {
     dashboard: 'Dashboard',
@@ -47,16 +59,50 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
       </div>
 
       {/* Right Action Bar */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
+        {/* Real-time Cloud Sync Status */}
+        {account ? (
+          <button
+            onClick={() => syncNow()}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/60 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+            title={syncStatus === 'syncing' ? 'Syncing to cloud...' : 'Real-time Cloud Sync Active (Click to force sync)'}
+          >
+            {syncStatus === 'syncing' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span className="hidden sm:inline text-[11px] text-amber-600 dark:text-amber-400 font-semibold">Syncing</span>
+              </>
+            ) : syncStatus === 'error' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span className="hidden sm:inline text-[11px] text-rose-500">Retry Sync</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="hidden sm:inline text-[11px] text-neutral-600 dark:text-neutral-400">Synced</span>
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={openAuthModal}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 text-xs font-semibold hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors shrink-0 shadow-xs"
+          >
+            <span className="w-2 h-2 rounded-full bg-teal-500" />
+            <span>Sync Account</span>
+          </button>
+        )}
+
         {/* Today's study time counter */}
-        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/60 text-xs text-neutral-600 dark:text-neutral-300">
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/60 text-xs text-neutral-600 dark:text-neutral-300">
           <span className="text-neutral-400 dark:text-neutral-500">Today:</span>
           <span className="font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
             {currentHours}h
           </span>
         </div>
 
-        {/* Quick Start Focus button (if not already on timer) */}
+        {/* Quick Start Focus button */}
         {activeTab !== 'timer' && (
           <button
             onClick={() => {
@@ -66,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-xs transition-colors shrink-0"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span className="hidden xs:inline">Focus Session</span>
+            <span className="hidden xs:inline">Focus</span>
           </button>
         )}
 
@@ -77,14 +123,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
             onOpenProfile();
           }}
           className="flex items-center gap-2 p-1 pl-2.5 rounded-lg bg-white dark:bg-neutral-800/80 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200/70 dark:border-neutral-700/60 text-xs font-medium text-neutral-700 dark:text-neutral-300 transition-colors"
-          title="Edit Profile"
+          title="Account & Profile Settings"
         >
-          <span className="hidden sm:inline font-medium text-neutral-800 dark:text-neutral-200">
-            {state.profile.name || 'Profile'}
+          <span className="hidden sm:inline font-medium text-neutral-800 dark:text-neutral-200 break-words max-w-[120px] leading-tight">
+            {account?.displayName || state.profile.name || 'Account'}
           </span>
           <div
             className="w-6 h-6 rounded-md flex items-center justify-center text-white font-bold text-[10px] shrink-0"
-            style={{ backgroundColor: state.profile.avatarColor || '#0d9488' }}
+            style={{ backgroundColor: account?.avatarColor || state.profile.avatarColor || '#0d9488' }}
           >
             {getInitials()}
           </div>

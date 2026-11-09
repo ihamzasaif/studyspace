@@ -11,7 +11,16 @@ import {
   UserSettings,
   ActiveTab,
   UserProfile,
+  AppAccount,
+  SyncStatus,
 } from '../types';
+import { subscribeToAuth, logoutUser } from '../firebase/authService';
+import {
+  saveStudyStateToCloud,
+  subscribeToCloudStudyState,
+  getCloudStudyState,
+} from '../firebase/syncService';
+import { testFirestoreConnection } from '../firebase/config';
 import {
   loadStudyState,
   saveStudyState,
@@ -37,6 +46,15 @@ interface StudyContextType {
   setSelectedSubjectId: (id: string | null) => void;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+
+  // Account & Sync
+  account: AppAccount | null;
+  syncStatus: SyncStatus;
+  isAuthModalOpen: boolean;
+  setIsAuthModalOpen: (open: boolean) => void;
+  openAuthModal: () => void;
+  logout: () => Promise<void>;
+  syncNow: () => Promise<void>;
 
   // Profile
   updateProfile: (updates: Partial<UserProfile>) => void;
@@ -199,13 +217,120 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     localStorage.setItem('study_room_theme', theme);
   }, [theme]);
 
-  // Persist state changes
+  // Account and Cloud Sync State
+  const [account, setAccount] = useState<AppAccount | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const isIncomingCloudUpdateRef = useRef(false);
+  const cloudSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Subscribe to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth((userAccount) => {
+      setAccount(userAccount);
+      if (userAccount) {
+        testFirestoreConnection();
+        // Update user profile fields if present in user account
+        setState((prev) => ({
+          ...prev,
+          profile: {
+            ...prev.profile,
+            name: userAccount.displayName || prev.profile.name,
+            profession: userAccount.profession || prev.profile.profession,
+            institution: userAccount.institution || prev.profile.institution,
+            avatarColor: userAccount.avatarColor || prev.profile.avatarColor,
+          },
+        }));
+      } else {
+        setSyncStatus('offline');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to remote Firestore studyData document for instant multi-device synchronization
+  useEffect(() => {
+    if (!account?.uid) return;
+
+    setSyncStatus('syncing');
+    const unsubscribe = subscribeToCloudStudyState(
+      account.uid,
+      (cloudState) => {
+        isIncomingCloudUpdateRef.current = true;
+        setState((currentLocal) => ({
+          ...currentLocal,
+          ...cloudState,
+          profile: { ...currentLocal.profile, ...cloudState.profile },
+          settings: { ...currentLocal.settings, ...cloudState.settings },
+        }));
+        setSyncStatus('synced');
+        setTimeout(() => {
+          isIncomingCloudUpdateRef.current = false;
+        }, 120);
+      },
+      (error) => {
+        console.warn('Real-time sync subscription error:', error);
+        setSyncStatus('error');
+      }
+    );
+
+    // Initial check: if cloud has no document yet for this new user, upload current local state
+    getCloudStudyState(account.uid).then((cloudData) => {
+      if (!cloudData) {
+        saveStudyStateToCloud(account.uid, state);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [account?.uid]);
+
+  // Persist state changes locally AND continuously sync to cloud (every second)
   useEffect(() => {
     saveStudyState(state);
-  }, [state]);
+
+    if (account?.uid && !isIncomingCloudUpdateRef.current) {
+      setSyncStatus('syncing');
+      if (cloudSyncTimerRef.current) {
+        clearTimeout(cloudSyncTimerRef.current);
+      }
+      // Real-time synchronization debounced by 800ms
+      cloudSyncTimerRef.current = setTimeout(async () => {
+        try {
+          await saveStudyStateToCloud(account.uid, state);
+          setSyncStatus('synced');
+        } catch (err) {
+          console.error('Failed to sync to cloud:', err);
+          setSyncStatus('error');
+        }
+      }, 800);
+    }
+  }, [state, account?.uid]);
+
+  const logout = async () => {
+    await logoutUser();
+    setAccount(null);
+    setSyncStatus('offline');
+  };
+
+  const syncNow = async () => {
+    if (!account?.uid) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setSyncStatus('syncing');
+    try {
+      await saveStudyStateToCloud(account.uid, state);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Manual sync failed:', err);
+      setSyncStatus('error');
+    }
+  };
+
+  const openAuthModal = () => setIsAuthModalOpen(true);
 
   const toggleTheme = () => {
-    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   // Subjects CRUD
@@ -627,6 +752,13 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setSelectedSubjectId,
         theme,
         toggleTheme,
+        account,
+        syncStatus,
+        isAuthModalOpen,
+        setIsAuthModalOpen,
+        openAuthModal,
+        logout,
+        syncNow,
         updateProfile,
         addSubject,
         updateSubject,

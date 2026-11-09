@@ -23,11 +23,12 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings, onOpenProfile }) => {
-  const { state, activeTab, setActiveTab, theme, toggleTheme, studyStreak } = useStudy();
+  const { state, activeTab, setActiveTab, theme, toggleTheme, studyStreak, account, openAuthModal } = useStudy();
 
   const getInitials = () => {
-    if (!state.profile.name.trim()) return 'U';
-    const parts = state.profile.name.trim().split(' ');
+    const rawName = account?.displayName || state.profile.name;
+    if (!rawName.trim()) return 'S';
+    const parts = rawName.trim().split(' ');
     if (parts.length === 1) return parts[0][0].toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
@@ -74,19 +75,44 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings, onOpenProfile 
         >
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-xs shadow-xs shrink-0"
-            style={{ backgroundColor: state.profile.avatarColor || '#0d9488' }}
+            style={{ backgroundColor: account?.avatarColor || state.profile.avatarColor || '#0d9488' }}
           >
             {getInitials()}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-neutral-900 dark:text-neutral-100 break-words leading-tight">
-              {state.profile.name || 'Setup Profile'}
+              {account?.displayName || state.profile.name || 'Setup Profile'}
             </p>
             <p className="text-[11px] text-neutral-400 dark:text-neutral-500 break-words mt-0.5 leading-tight">
-              {state.profile.profession || 'Click to add profession'}
+              {account ? `@${account.username}` : (state.profile.profession || 'Click to add profession')}
             </p>
           </div>
         </button>
+      </div>
+
+      {/* Cloud Sync Status */}
+      <div className="px-4 py-1.5">
+        {account ? (
+          <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200/60 dark:border-teal-800/50 text-[11px] text-teal-800 dark:text-teal-300">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span>Real-time Synced</span>
+            </span>
+            <span className="text-[10px] text-teal-600 dark:text-teal-400 font-mono">Cloud Active</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              playSoftClick();
+              openAuthModal();
+            }}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+            <span>Create Account / Sync</span>
+          </button>
+        )}
       </div>
 
       {/* Streak Ribbon */}

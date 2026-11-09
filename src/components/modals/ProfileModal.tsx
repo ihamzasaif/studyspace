@@ -13,7 +13,7 @@ interface ProfileModalProps {
 export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
   useBackHandler(isOpen, onClose, 'profile-modal');
 
-  const { state, updateProfile } = useStudy();
+  const { state, updateProfile, account, logout, openAuthModal } = useStudy();
 
   const [name, setName] = useState(state.profile.name || '');
   const [profession, setProfession] = useState(state.profile.profession || '');
@@ -24,13 +24,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
 
   useEffect(() => {
     if (isOpen) {
-      setName(state.profile.name || '');
-      setProfession(state.profile.profession || '');
-      setInstitution(state.profile.institution || '');
+      setName(account?.displayName || state.profile.name || '');
+      setProfession(account?.profession || state.profile.profession || '');
+      setInstitution(account?.institution || state.profile.institution || '');
       setTargetGoal(state.profile.targetGoal || '');
-      setAvatarColor(state.profile.avatarColor || '#0d9488');
+      setAvatarColor(account?.avatarColor || state.profile.avatarColor || '#0d9488');
     }
-  }, [isOpen, state.profile]);
+  }, [isOpen, state.profile, account]);
 
   if (!isOpen) return null;
 
@@ -73,7 +73,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
           <div className="flex items-center gap-2">
             <User className="w-5 h-5 text-teal-600 dark:text-teal-400" />
             <h2 id="profile-modal-title" className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-              Personal Study Profile
+              Personal Study Profile & Account
             </h2>
           </div>
           <button
@@ -86,6 +86,54 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
 
         {/* Scrollable Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Account Cloud Status Banner */}
+          {account ? (
+            <div className="p-3.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-teal-900 dark:text-teal-200 break-words leading-tight">
+                    Synced Account: @{account.username}
+                  </p>
+                  <p className="text-[11px] text-teal-700/80 dark:text-teal-400 break-words mt-0.5">
+                    Real-time multi-device cloud synchronization active
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout();
+                  onClose();
+                }}
+                className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg font-semibold transition-colors shrink-0"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-between text-xs gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  Local Mode (Not Synced)
+                </p>
+                <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-0.5">
+                  Create an account to keep your dashboard synced across devices.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openAuthModal();
+                }}
+                className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-semibold text-xs shadow-xs transition-colors shrink-0"
+              >
+                Sign In / Sync
+              </button>
+            </div>
+          )}
+
           {/* Identity Preview Card */}
           <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700/60 flex items-center gap-4">
             <div

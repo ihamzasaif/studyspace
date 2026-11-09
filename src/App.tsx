@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StudyProvider, useStudy } from './context/StudyContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { MobileNav } from './components/layout/MobileNav';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { ProfileModal } from './components/modals/ProfileModal';
+import { AuthModal } from './components/modals/AuthModal';
 
 import { Dashboard } from './components/dashboard/Dashboard';
 import { SubjectsView } from './components/subjects/SubjectsView';
@@ -21,9 +22,18 @@ import { NotesView } from './components/notes/NotesView';
 import { StatsView } from './components/stats/StatsView';
 
 const MainLayout: React.FC = () => {
-  const { activeTab } = useStudy();
+  const { activeTab, account, isAuthModalOpen, setIsAuthModalOpen } = useStudy();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  // Automatically prompt account creation on initial visit if not logged in
+  useEffect(() => {
+    const hasSeenPrompt = sessionStorage.getItem('study_room_auth_prompt_shown');
+    if (!account && !hasSeenPrompt) {
+      sessionStorage.setItem('study_room_auth_prompt_shown', 'true');
+      setIsAuthModalOpen(true);
+    }
+  }, [account, setIsAuthModalOpen]);
 
   const renderActiveView = () => {
     switch (activeTab) {
@@ -96,6 +106,12 @@ const MainLayout: React.FC = () => {
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
+      />
+
+      {/* Cloud Account & Real-time Sync Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </div>
   );
