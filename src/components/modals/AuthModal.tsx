@@ -21,7 +21,6 @@ import {
   Check,
   ExternalLink,
   ShieldAlert,
-  Sparkles,
 } from 'lucide-react';
 import { AppAccount } from '../../types';
 
@@ -67,27 +66,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setCopiedDomain(true);
       setTimeout(() => setCopiedDomain(false), 2000);
     }
-  };
-
-  const handleCreateInstantFallback = () => {
-    const cleanUser = sanitizeUsername(username) || `student_${Date.now().toString().slice(-4)}`;
-    const acc = createInstantAccount({
-      username: cleanUser,
-      name: name.trim() || 'Learner',
-      password,
-      profession: profession.trim(),
-      institution: institution.trim(),
-      avatarColor,
-    });
-    updateProfile({
-      name: acc.displayName,
-      profession: acc.profession,
-      institution: acc.institution,
-      avatarColor: acc.avatarColor,
-    });
-    playSoftClick();
-    if (onSuccess) onSuccess(acc);
-    onClose();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -317,15 +295,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>Open Firebase Settings</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
-
-              <button
-                type="button"
-                onClick={handleCreateInstantFallback}
-                className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-semibold shadow-xs flex items-center gap-1 transition-colors"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Instant Account (Skip Domain)</span>
-              </button>
             </div>
           </div>
         )}
@@ -465,18 +434,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <span>{mode === 'signup' ? 'Create Account & Start' : 'Sign In to Study Room'}</span>
           </button>
         </form>
-
-        {/* Instant Study Account 1-Click option */}
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={handleCreateInstantFallback}
-            className="w-full py-2 px-3 rounded-xl border border-teal-200 dark:border-teal-900/60 bg-teal-50/50 dark:bg-teal-950/30 hover:bg-teal-100/60 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-            <span>Create Instant Account without Google / Cloud setup</span>
-          </button>
-        </div>
 
         {/* Divider */}
         <div className="relative flex items-center justify-center">
