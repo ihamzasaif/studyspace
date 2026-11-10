@@ -60,7 +60,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProf
       {/* More Drawer for small mobile screens */}
       {isMoreOpen && (
         <div
-          className="2xl:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
+          className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
           onClick={() => setIsMoreOpen(false)}
         >
           <div
@@ -171,9 +171,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSettings, onOpenProf
         </div>
       )}
 
-      {/* Fixed Bottom Navigation (Active for any screen < 2xl, e.g. mobile, tablet, and split-screen preview) */}
+      {/* Fixed Bottom Navigation (Active only for mobile/tablet screens < lg) */}
       <nav
-        className="2xl:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#16181D]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 px-2 py-1.5 transition-colors"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#16181D]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 px-2 py-1.5 transition-colors"
         aria-label="Bottom Navigation"
       >
         {/* On small phones (< sm): 4 main items + More button */}
