@@ -38,6 +38,10 @@ import {
   getWeekDates,
 } from '../utils/date';
 import confetti from 'canvas-confetti';
+import { playChime, playSoftClick, startAmbientNoise, stopAmbientNoise } from '../utils/audio';
+
+export type TimerMode = 'work' | 'shortBreak' | 'longBreak';
+export type AmbientSoundType = 'off' | 'brown' | 'white' | 'rain' | 'waves';
 
 interface StudyContextType {
   state: StudyState;
@@ -116,6 +120,26 @@ interface StudyContextType {
   studyStreak: number;
   weeklyStudyHours: { day: string; date: string; hours: number; isToday: boolean }[];
   subjectStats: { subject: Subject; hours: number; totalGoals: number; completedGoals: number; percentage: number }[];
+
+  // Global Background Timer & Ambient Sound
+  timerMode: TimerMode;
+  timerTimeLeft: number;
+  isTimerRunning: boolean;
+  timerSessionCount: number;
+  timerSubjectId: string;
+  ambientSound: AmbientSoundType;
+  ambientVolume: number;
+  timerFormatted: string;
+  timerProgressRatio: number;
+  startTimer: () => void;
+  pauseTimer: () => void;
+  toggleTimerRunning: () => void;
+  resetTimer: () => void;
+  skipTimer: () => void;
+  switchTimerMode: (mode: TimerMode) => void;
+  setTimerSubjectId: (id: string) => void;
+  setAmbientSoundMode: (sound: AmbientSoundType, vol?: number) => void;
+  setAmbientVolumeLevel: (vol: number) => void;
 }
 
 const StudyContext = createContext<StudyContextType | undefined>(undefined);
@@ -228,6 +252,179 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     localStorage.setItem('study_room_theme', theme);
   }, [theme]);
+
+  // Global Pomodoro Timer State (persists continuously across all tab switches & page changes)
+  const [timerMode, setTimerMode] = useState<TimerMode>('work');
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const [timerSessionCount, setTimerSessionCount] = useState<number>(1);
+  const [timerSubjectId, setTimerSubjectId] = useState<string>('');
+  const [ambientSound, setAmbientSound] = useState<AmbientSoundType>('off');
+  const [ambientVolume, setAmbientVolume] = useState<number>(0.28);
+
+  const getTimerDurationSeconds = (m: TimerMode, settings = state.settings) => {
+    if (m === 'work') return (settings.pomodoroWorkMinutes || 25) * 60;
+    if (m === 'shortBreak') return (settings.pomodoroShortBreakMinutes || 5) * 60;
+    return (settings.pomodoroLongBreakMinutes || 15) * 60;
+  };
+
+  const [timerTimeLeft, setTimerTimeLeft] = useState<number>(() => {
+    return (loadStudyState()?.settings?.pomodoroWorkMinutes || 25) * 60;
+  });
+
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize timerSubjectId with first subject if unset
+  useEffect(() => {
+    if (!timerSubjectId && state.subjects.length > 0) {
+      setTimerSubjectId(state.subjects[0].id);
+    }
+  }, [state.subjects, timerSubjectId]);
+
+  // Sync timer duration if settings change while timer is not actively running
+  useEffect(() => {
+    if (!isTimerRunning) {
+      setTimerTimeLeft(getTimerDurationSeconds(timerMode));
+    }
+  }, [timerMode, state.settings.pomodoroWorkMinutes, state.settings.pomodoroShortBreakMinutes, state.settings.pomodoroLongBreakMinutes]);
+
+  // Global background ticking timer
+  useEffect(() => {
+    if (isTimerRunning) {
+      timerIntervalRef.current = setInterval(() => {
+        setTimerTimeLeft((prev) => {
+          if (prev <= 1) {
+            handleTimerSessionComplete();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [isTimerRunning, timerMode, timerSubjectId, timerSessionCount, state.settings.soundEnabled, todayStr]);
+
+  const handleTimerSessionComplete = () => {
+    setIsTimerRunning(false);
+    if (state.settings.soundEnabled) {
+      playChime();
+    }
+
+    if (timerMode === 'work') {
+      const minutesSpent = state.settings.pomodoroWorkMinutes || 25;
+      const subId = timerSubjectId || state.subjects[0]?.id || 'general';
+      const newSession: StudySession = {
+        id: `sess-${Date.now()}`,
+        subjectId: subId,
+        date: todayStr,
+        minutes: minutesSpent,
+        mode: 'pomodoro',
+        timestamp: new Date().toISOString(),
+        note: `Pomodoro Focus session #${timerSessionCount}`,
+      };
+
+      setState((prev) => ({
+        ...prev,
+        studySessions: [newSession, ...prev.studySessions],
+      }));
+
+      try {
+        confetti({
+          particleCount: 90,
+          spread: 70,
+          origin: { y: 0.65 },
+        });
+      } catch {}
+
+      if (timerSessionCount % 4 === 0) {
+        setTimerMode('longBreak');
+        setTimerTimeLeft((state.settings.pomodoroLongBreakMinutes || 15) * 60);
+      } else {
+        setTimerMode('shortBreak');
+        setTimerTimeLeft((state.settings.pomodoroShortBreakMinutes || 5) * 60);
+      }
+      setTimerSessionCount((c) => c + 1);
+    } else {
+      setTimerMode('work');
+      setTimerTimeLeft((state.settings.pomodoroWorkMinutes || 25) * 60);
+    }
+  };
+
+  const toggleTimerRunning = () => {
+    playSoftClick();
+    setIsTimerRunning((prev) => !prev);
+  };
+
+  const startTimer = () => {
+    playSoftClick();
+    setIsTimerRunning(true);
+  };
+
+  const pauseTimer = () => {
+    playSoftClick();
+    setIsTimerRunning(false);
+  };
+
+  const resetTimer = () => {
+    playSoftClick();
+    setIsTimerRunning(false);
+    setTimerTimeLeft(getTimerDurationSeconds(timerMode));
+  };
+
+  const skipTimer = () => {
+    playSoftClick();
+    setIsTimerRunning(false);
+    if (timerMode === 'work') {
+      setTimerMode('shortBreak');
+      setTimerTimeLeft(getTimerDurationSeconds('shortBreak'));
+    } else {
+      setTimerMode('work');
+      setTimerTimeLeft(getTimerDurationSeconds('work'));
+    }
+  };
+
+  const switchTimerMode = (newMode: TimerMode) => {
+    playSoftClick();
+    setIsTimerRunning(false);
+    setTimerMode(newMode);
+    setTimerTimeLeft(getTimerDurationSeconds(newMode));
+  };
+
+  const setAmbientSoundMode = (sound: AmbientSoundType, vol = ambientVolume) => {
+    setAmbientSound(sound);
+    if (sound === 'off') {
+      stopAmbientNoise();
+    } else {
+      startAmbientNoise(sound, vol);
+    }
+  };
+
+  const setAmbientVolumeLevel = (vol: number) => {
+    setAmbientVolume(vol);
+    if (ambientSound !== 'off') {
+      startAmbientNoise(ambientSound, vol);
+    }
+  };
+
+  const timerFormatted = useMemo(() => {
+    const mins = Math.floor(timerTimeLeft / 60);
+    const secs = timerTimeLeft % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [timerTimeLeft]);
+
+  const timerProgressRatio = useMemo(() => {
+    const total = getTimerDurationSeconds(timerMode);
+    return total > 0 ? (total - timerTimeLeft) / total : 0;
+  }, [timerMode, timerTimeLeft, state.settings]);
 
   // Account and Cloud Sync State
   const [account, setAccount] = useState<AppAccount | null>(null);
@@ -876,6 +1073,24 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         studyStreak,
         weeklyStudyHours,
         subjectStats,
+        timerMode,
+        timerTimeLeft,
+        isTimerRunning,
+        timerSessionCount,
+        timerSubjectId,
+        ambientSound,
+        ambientVolume,
+        timerFormatted,
+        timerProgressRatio,
+        startTimer,
+        pauseTimer,
+        toggleTimerRunning,
+        resetTimer,
+        skipTimer,
+        switchTimerMode,
+        setTimerSubjectId,
+        setAmbientSoundMode,
+        setAmbientVolumeLevel,
       }}
     >
       {children}

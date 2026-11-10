@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useStudy } from '../../context/StudyContext';
-import { playChime, playSoftClick, startAmbientNoise, stopAmbientNoise } from '../../utils/audio';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { getDaysRemaining, formatDateDisplay } from '../../utils/date';
 import {
   Play,
   Pause,
@@ -13,389 +13,423 @@ import {
   VolumeX,
   Volume1,
   CheckCircle2,
-  BookOpen,
+  Circle,
+  Calendar,
+  CheckSquare,
+  Sparkles,
+  Flame,
 } from 'lucide-react';
 
-type TimerMode = 'work' | 'shortBreak' | 'longBreak';
-
 export const FocusTimerView: React.FC = () => {
-  const { state, addStudySession, todayStr, getSubject } = useStudy();
+  const {
+    state,
+    getSubject,
+    todayGoals,
+    todayCompletedGoalsCount,
+    toggleGoal,
+    todayStr,
+    timerMode,
+    isTimerRunning,
+    timerSessionCount,
+    timerSubjectId,
+    ambientSound,
+    ambientVolume,
+    timerFormatted,
+    timerProgressRatio,
+    toggleTimerRunning,
+    resetTimer,
+    skipTimer,
+    switchTimerMode,
+    setTimerSubjectId,
+    setAmbientSoundMode,
+    setAmbientVolumeLevel,
+  } = useStudy();
 
-  const [mode, setMode] = useState<TimerMode>('work');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(state.subjects[0]?.id || '');
-  const [sessionCount, setSessionCount] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [ambientSound, setAmbientSound] = useState<'off' | 'brown' | 'white' | 'rain' | 'waves'>('off');
-  const [ambientVolume, setAmbientVolume] = useState<number>(0.28);
-
   useBackHandler(isFullscreen, () => setIsFullscreen(false), 'timer-fullscreen');
 
-  // Timer length in seconds based on settings
-  const getDurationSeconds = (m: TimerMode) => {
-    if (m === 'work') return state.settings.pomodoroWorkMinutes * 60;
-    if (m === 'shortBreak') return state.settings.pomodoroShortBreakMinutes * 60;
-    return state.settings.pomodoroLongBreakMinutes * 60;
-  };
+  const activeSubject = getSubject(timerSubjectId) || state.subjects[0];
 
-  const [timeLeft, setTimeLeft] = useState<number>(() => getDurationSeconds('work'));
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Exam Countdown details
+  const examInfo = state.examCountdown ? getDaysRemaining(state.examCountdown.targetDate) : null;
+  const examSubject = state.examCountdown?.subjectId ? getSubject(state.examCountdown.subjectId) : null;
 
-  // Sync timeLeft when mode changes or settings change (if timer not running)
-  useEffect(() => {
-    if (!isRunning) {
-      setTimeLeft(getDurationSeconds(mode));
-    }
-  }, [mode, state.settings.pomodoroWorkMinutes, state.settings.pomodoroShortBreakMinutes, state.settings.pomodoroLongBreakMinutes]);
-
-  // Main countdown tick
-  useEffect(() => {
-    if (isRunning) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            handleSessionComplete();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isRunning, mode, selectedSubjectId, sessionCount, state.settings.soundEnabled]);
-
-  // Handle session completion
-  const handleSessionComplete = () => {
-    setIsRunning(false);
-
-    if (state.settings.soundEnabled) {
-      playChime();
-    }
-
-    if (mode === 'work') {
-      // Record completed study session
-      const minutesSpent = state.settings.pomodoroWorkMinutes;
-      addStudySession({
-        subjectId: selectedSubjectId || state.subjects[0]?.id || 'general',
-        date: todayStr,
-        minutes: minutesSpent,
-        mode: 'pomodoro',
-        note: `Pomodoro Focus session #${sessionCount}`,
-      });
-
-      // Switch to break
-      if (sessionCount % 4 === 0) {
-        setMode('longBreak');
-        setTimeLeft(state.settings.pomodoroLongBreakMinutes * 60);
-      } else {
-        setMode('shortBreak');
-        setTimeLeft(state.settings.pomodoroShortBreakMinutes * 60);
-      }
-      setSessionCount((prev) => prev + 1);
-    } else {
-      // Break completed, switch back to work
-      setMode('work');
-      setTimeLeft(state.settings.pomodoroWorkMinutes * 60);
-    }
-  };
-
-  const handleStartPause = () => {
-    playSoftClick();
-    setIsRunning(!isRunning);
-  };
-
-  const handleReset = () => {
-    playSoftClick();
-    setIsRunning(false);
-    setTimeLeft(getDurationSeconds(mode));
-  };
-
-  const handleSkip = () => {
-    playSoftClick();
-    setIsRunning(false);
-    if (mode === 'work') {
-      setMode('shortBreak');
-    } else {
-      setMode('work');
-    }
-  };
-
-  const switchMode = (newMode: TimerMode) => {
-    playSoftClick();
-    setIsRunning(false);
-    setMode(newMode);
-    setTimeLeft(getDurationSeconds(newMode));
-  };
-
-  const handleAmbientChange = (type: 'off' | 'brown' | 'white' | 'rain' | 'waves', vol: number = ambientVolume) => {
-    setAmbientSound(type);
-    if (type === 'off') {
-      stopAmbientNoise();
-    } else {
-      startAmbientNoise(type, vol);
-    }
-  };
-
-  // Cleanup ambient noise on unmount
-  useEffect(() => {
-    return () => {
-      stopAmbientNoise();
-    };
-  }, []);
-
-  // Format MM:SS
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
-  const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-  const totalDuration = getDurationSeconds(mode);
-  const progressRatio = (totalDuration - timeLeft) / totalDuration;
-  const strokeDashoffset = 754 * (1 - progressRatio); // 2 * PI * r (r=120 -> circumference = 753.98)
-
-  const activeSubject = getSubject(selectedSubjectId);
+  // Circular progress: r=105 -> circumference ≈ 659.73
+  const CIRCLE_CIRCUMFERENCE = 660;
+  const strokeDashoffset = CIRCLE_CIRCUMFERENCE * (1 - Math.min(1, Math.max(0, timerProgressRatio)));
 
   return (
     <div
-      className={`transition-all ${
+      className={`w-full transition-all ${
         isFullscreen
-          ? 'fixed inset-0 z-50 bg-[#F8F9FA] dark:bg-[#121417] flex flex-col items-center justify-center p-6'
-          : 'max-w-3xl mx-auto space-y-6 pb-12'
+          ? 'fixed inset-0 z-50 bg-[#F8F9FA] dark:bg-[#121417] flex flex-col items-center justify-center p-4'
+          : 'max-w-6xl mx-auto h-[calc(100vh-6.25rem)] max-h-[calc(100vh-6.25rem)] flex flex-col justify-between overflow-hidden gap-2.5 pb-1'
       }`}
     >
       {/* Top Banner (only when not fullscreen) */}
       {!isFullscreen && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+        <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
               Focus Pomodoro Timer
             </h1>
-            <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Dedicated deep work intervals. Sessions are automatically logged to your subject hours.
-            </p>
+            <span
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                timerMode === 'work'
+                  ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800'
+                  : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:indigo-300 border border-indigo-200 dark:border-indigo-800'
+              }`}
+            >
+              {timerMode === 'work' ? 'Focus Interval' : 'Rest Break'}
+            </span>
           </div>
 
           <button
             onClick={() => setIsFullscreen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl hover:bg-neutral-50 dark:hover:bg-neutral-700/60 shadow-xs transition-colors self-start sm:self-auto"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl hover:bg-neutral-50 dark:hover:bg-neutral-700/60 shadow-xs transition-colors shrink-0"
+            title="Expand to Fullscreen"
           >
             <Maximize2 className="w-3.5 h-3.5" />
-            <span>Fullscreen Mode</span>
+            <span className="hidden sm:inline">Fullscreen</span>
           </button>
         </div>
       )}
 
-      {/* Main Timer Glass Container */}
-      <div className="w-full max-w-xl mx-auto bg-white dark:bg-[#1A1D23] rounded-3xl p-6 sm:p-10 border border-neutral-200/80 dark:border-neutral-800/80 shadow-sm flex flex-col items-center relative">
-        {/* Fullscreen exit button if fullscreen */}
-        {isFullscreen && (
-          <button
-            onClick={() => setIsFullscreen(false)}
-            className="absolute top-6 right-6 p-2 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-            title="Exit Fullscreen"
-          >
-            <Minimize2 className="w-5 h-5" />
-          </button>
+      {/* Main Content Area: Landscape Split on Desktop / Tablet (Zero Vertical Scroll) */}
+      <div className="flex-1 flex flex-col md:flex-row gap-3 min-h-0 overflow-hidden items-stretch">
+        {/* Left Side Panel: Target Exam & Today's Goals (Visible on Tablet & Desktop, Hidden on Mobile as requested) */}
+        {!isFullscreen && (
+          <div className="hidden md:flex flex-col gap-3 w-72 lg:w-80 shrink-0 min-h-0 overflow-hidden">
+            {/* 1. Target Exam / Target Hours Card */}
+            <div className="bg-white dark:bg-[#1A1D23] rounded-2xl p-3.5 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs shrink-0">
+              {state.examCountdown ? (
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0 mt-0.5">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+                        Target Exam
+                      </span>
+                      <span className="text-[11px] font-bold text-teal-600 dark:text-teal-400 tabular-nums">
+                        {examInfo?.label}
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate mt-0.5">
+                      {state.examCountdown.title}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                      <span>{formatDateDisplay(state.examCountdown.targetDate)}</span>
+                      {examSubject && (
+                        <>
+                          <span>·</span>
+                          <span className="truncate">{examSubject.name}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+                      Daily Study Target
+                    </span>
+                    <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 mt-0.5">
+                      {state.settings.dailyTargetHours} Hours Goal
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-mono font-bold text-teal-600 dark:text-teal-400">
+                      Stay Consistent
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Today's Goals Checklist Panel */}
+            <div className="flex-1 flex flex-col bg-white dark:bg-[#1A1D23] rounded-2xl p-3.5 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs min-h-0 overflow-hidden">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-100 dark:border-neutral-800/80 shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <CheckSquare className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
+                    Today's Goals
+                  </span>
+                </div>
+                <span className="text-[11px] font-medium text-neutral-400 tabular-nums">
+                  {todayCompletedGoalsCount}/{todayGoals.length} done
+                </span>
+              </div>
+
+              {/* Scrollable list inside panel */}
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                {todayGoals.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center py-6 text-neutral-400 text-xs">
+                    <Sparkles className="w-5 h-5 text-neutral-300 dark:text-neutral-600 mb-1" />
+                    <span>No goals scheduled for today.</span>
+                  </div>
+                ) : (
+                  todayGoals.map((goal) => {
+                    const sub = getSubject(goal.subjectId);
+                    return (
+                      <div
+                        key={goal.id}
+                        onClick={() => toggleGoal(goal.id)}
+                        className={`flex items-start gap-2 p-2 rounded-xl border transition-colors cursor-pointer select-none ${
+                          goal.completed
+                            ? 'bg-neutral-50/60 dark:bg-neutral-800/20 border-neutral-200/50 dark:border-neutral-800/40 opacity-75'
+                            : 'bg-white dark:bg-neutral-800/40 border-neutral-200/80 dark:border-neutral-800/80 hover:border-teal-500'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="mt-0.5 text-neutral-400 hover:text-teal-600 dark:hover:text-teal-400 shrink-0"
+                          aria-label={goal.completed ? 'Mark incomplete' : 'Mark completed'}
+                        >
+                          {goal.completed ? (
+                            <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-teal-400 fill-teal-100 dark:fill-teal-950/40" />
+                          ) : (
+                            <Circle className="w-4 h-4" />
+                          )}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={`text-xs font-medium truncate ${
+                              goal.completed
+                                ? 'line-through text-neutral-400 dark:text-neutral-500'
+                                : 'text-neutral-800 dark:text-neutral-200'
+                            }`}
+                          >
+                            {goal.title}
+                          </p>
+                          {sub && (
+                            <span
+                              className="text-[10px] font-medium flex items-center gap-1 mt-0.5 truncate"
+                              style={{ color: sub.color }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sub.color }} />
+                              {sub.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* Mode Selector Tabs */}
-        <div className="flex items-center p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl text-xs font-semibold mb-8">
-          <button
-            onClick={() => switchMode('work')}
-            className={`px-4 py-1.5 rounded-lg transition-colors ${
-              mode === 'work'
-                ? 'bg-white dark:bg-neutral-900 text-teal-700 dark:text-teal-400 shadow-xs'
-                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-            }`}
-          >
-            Focus ({state.settings.pomodoroWorkMinutes}m)
-          </button>
-          <button
-            onClick={() => switchMode('shortBreak')}
-            className={`px-4 py-1.5 rounded-lg transition-colors ${
-              mode === 'shortBreak'
-                ? 'bg-white dark:bg-neutral-900 text-teal-700 dark:text-teal-400 shadow-xs'
-                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-            }`}
-          >
-            Short Break ({state.settings.pomodoroShortBreakMinutes}m)
-          </button>
-          <button
-            onClick={() => switchMode('longBreak')}
-            className={`px-4 py-1.5 rounded-lg transition-colors ${
-              mode === 'longBreak'
-                ? 'bg-white dark:bg-neutral-900 text-teal-700 dark:text-teal-400 shadow-xs'
-                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-            }`}
-          >
-            Long Break ({state.settings.pomodoroLongBreakMinutes}m)
-          </button>
-        </div>
+        {/* Right / Center Panel: The Focus Timer (Compact & Zero Scroll) */}
+        <div className="flex-1 flex flex-col justify-between items-center bg-white dark:bg-[#1A1D23] rounded-3xl p-4 sm:p-5 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs min-h-0 overflow-hidden relative">
+          {/* Fullscreen exit button */}
+          {isFullscreen && (
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+              title="Exit Fullscreen"
+            >
+              <Minimize2 className="w-5 h-5" />
+            </button>
+          )}
 
-        {/* Subject Picker for this session */}
-        <div className="flex items-center gap-2 mb-6 text-xs">
-          <span className="text-neutral-500 font-medium">Study Subject:</span>
-          <select
-            value={selectedSubjectId}
-            onChange={(e) => setSelectedSubjectId(e.target.value)}
-            disabled={isRunning}
-            className="px-3 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 font-medium focus:outline-hidden disabled:opacity-60 cursor-pointer"
-          >
-            {state.subjects.map((sub) => (
-              <option key={sub.id} value={sub.id}>
-                {sub.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Circular Countdown Display */}
-        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center my-2">
-          <svg className="w-full h-full transform -rotate-90">
-            {/* Background ring */}
-            <circle
-              cx="50%"
-              cy="50%"
-              r="120"
-              className="stroke-neutral-100 dark:stroke-neutral-800"
-              strokeWidth="10"
-              fill="transparent"
-            />
-            {/* Active progress ring */}
-            <circle
-              cx="50%"
-              cy="50%"
-              r="120"
-              className="stroke-teal-600 dark:stroke-teal-400 transition-all duration-1000 ease-linear"
-              strokeWidth="10"
-              strokeDasharray="754"
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              fill="transparent"
-            />
-          </svg>
-
-          {/* Central Time and Status */}
-          <div className="absolute flex flex-col items-center justify-center text-center">
-            <span className="text-5xl sm:text-6xl font-bold font-mono tracking-tight tabular-nums text-neutral-900 dark:text-neutral-100">
-              {timeFormatted}
-            </span>
-            <span className="text-xs font-semibold text-neutral-400 dark:text-neutral-500 mt-2 uppercase tracking-wider">
-              {mode === 'work' ? `Session #${sessionCount}` : 'Rest & Rehydrate'}
-            </span>
-            {activeSubject && (
-              <span
-                className="text-[11px] font-medium mt-1 break-words max-w-[220px] px-2 leading-tight"
-                style={{ color: activeSubject.color }}
-              >
-                {activeSubject.name}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Primary Controls */}
-        <div className="flex items-center gap-4 mt-8">
-          <button
-            onClick={handleReset}
-            className="p-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-all hover:scale-105"
-            title="Reset Timer"
-          >
-            <RotateCcw className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={handleStartPause}
-            className={`px-8 py-3.5 rounded-2xl font-bold text-sm text-white flex items-center gap-2 shadow-sm transition-all hover:scale-105 ${
-              isRunning ? 'bg-amber-600 hover:bg-amber-700' : 'bg-teal-600 hover:bg-teal-700'
-            }`}
-          >
-            {isRunning ? (
-              <>
-                <Pause className="w-5 h-5 fill-current" />
-                <span>Pause</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-5 h-5 fill-current" />
-                <span>Start Focus</span>
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={handleSkip}
-            className="p-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-all hover:scale-105"
-            title="Skip to next session"
-          >
-            <SkipForward className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Ambient Sound Controller */}
-        <div className="flex flex-col items-center gap-2.5 mt-8 pt-6 border-t border-neutral-100 dark:border-neutral-800 w-full">
-          <div className="flex items-center justify-between w-full max-w-sm px-1">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 font-medium">
-              {ambientSound !== 'off' ? (
-                <Volume2 className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
-              ) : (
-                <VolumeX className="w-4 h-4 text-neutral-400" />
-              )}
-              <span>Calm Background Noise</span>
-              {ambientSound !== 'off' && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">
-                  Active
-                </span>
-              )}
-            </span>
-
-            {/* Volume slider when active */}
-            {ambientSound !== 'off' && (
-              <div className="flex items-center gap-1.5">
-                <Volume1 className="w-3 h-3 text-neutral-400" />
-                <input
-                  type="range"
-                  min="0.08"
-                  max="0.45"
-                  step="0.02"
-                  value={ambientVolume}
-                  onChange={(e) => {
-                    const newVol = parseFloat(e.target.value);
-                    setAmbientVolume(newVol);
-                    startAmbientNoise(ambientSound, newVol);
-                  }}
-                  className="w-16 h-1 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-teal-600"
-                  title="Noise Volume"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap justify-center">
-            {([
-              { key: 'off', label: 'Mute' },
-              { key: 'brown', label: 'Brown Noise' },
-              { key: 'rain', label: 'Rain' },
-              { key: 'waves', label: 'Ocean Waves' },
-              { key: 'white', label: 'White Noise' },
-            ] as const).map(({ key, label }) => (
+          {/* Top Row: Mode Pills + Subject Selector */}
+          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
+            {/* Mode Selector Tabs */}
+            <div className="flex items-center p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl text-xs font-semibold">
               <button
-                key={key}
-                type="button"
-                onClick={() => handleAmbientChange(key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all cursor-pointer ${
-                  ambientSound === key
-                    ? 'bg-teal-700 text-white shadow-xs font-semibold scale-102'
-                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700/60'
+                onClick={() => switchTimerMode('work')}
+                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  timerMode === 'work'
+                    ? 'bg-white dark:bg-neutral-900 text-teal-700 dark:text-teal-400 shadow-xs'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
                 }`}
               >
-                {label}
+                Focus ({state.settings.pomodoroWorkMinutes}m)
               </button>
-            ))}
+              <button
+                onClick={() => switchTimerMode('shortBreak')}
+                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  timerMode === 'shortBreak'
+                    ? 'bg-white dark:bg-neutral-900 text-teal-700 dark:text-teal-400 shadow-xs'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                }`}
+              >
+                Short Break ({state.settings.pomodoroShortBreakMinutes}m)
+              </button>
+              <button
+                onClick={() => switchTimerMode('longBreak')}
+                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  timerMode === 'longBreak'
+                    ? 'bg-white dark:bg-neutral-900 text-teal-700 dark:text-teal-400 shadow-xs'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                }`}
+              >
+                Long Break ({state.settings.pomodoroLongBreakMinutes}m)
+              </button>
+            </div>
+
+            {/* Subject Picker */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-neutral-400 font-medium hidden sm:inline">Subject:</span>
+              <select
+                value={timerSubjectId}
+                onChange={(e) => setTimerSubjectId(e.target.value)}
+                disabled={isTimerRunning}
+                className="px-2.5 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 text-xs font-medium focus:outline-hidden disabled:opacity-60 cursor-pointer max-w-[160px] truncate"
+              >
+                {state.subjects.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Central Circular Countdown: Scaled to fit in viewport without scroll */}
+          <div className="relative w-48 h-48 sm:w-56 sm:h-56 lg:w-60 lg:h-60 flex items-center justify-center my-auto shrink-0">
+            <svg viewBox="0 0 240 240" className="w-full h-full transform -rotate-90">
+              {/* Background ring */}
+              <circle
+                cx="120"
+                cy="120"
+                r="105"
+                className="stroke-neutral-100 dark:stroke-neutral-800"
+                strokeWidth="8"
+                fill="transparent"
+              />
+              {/* Active progress ring */}
+              <circle
+                cx="120"
+                cy="120"
+                r="105"
+                className="stroke-teal-600 dark:stroke-teal-400 transition-all duration-1000 ease-linear"
+                strokeWidth="8"
+                strokeDasharray={CIRCLE_CIRCUMFERENCE}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                fill="transparent"
+              />
+            </svg>
+
+            {/* Central Time and Status */}
+            <div className="absolute flex flex-col items-center justify-center text-center px-4">
+              <span className="text-4xl sm:text-5xl lg:text-6xl font-bold font-mono tracking-tight tabular-nums text-neutral-900 dark:text-neutral-100">
+                {timerFormatted}
+              </span>
+              <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mt-1 uppercase tracking-wider">
+                {timerMode === 'work' ? `Session #${timerSessionCount}` : 'Rest & Rehydrate'}
+              </span>
+              {activeSubject && (
+                <span
+                  className="text-xs font-medium mt-0.5 truncate max-w-[180px]"
+                  style={{ color: activeSubject.color }}
+                >
+                  {activeSubject.name}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Primary Controls */}
+          <div className="flex items-center gap-4 shrink-0 my-1">
+            <button
+              onClick={resetTimer}
+              className="p-2.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-all hover:scale-105 cursor-pointer"
+              title="Reset Timer"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={toggleTimerRunning}
+              className={`px-7 py-3 rounded-2xl font-bold text-sm text-white flex items-center gap-2 shadow-sm transition-all hover:scale-105 cursor-pointer ${
+                isTimerRunning ? 'bg-amber-600 hover:bg-amber-700' : 'bg-teal-600 hover:bg-teal-700'
+              }`}
+            >
+              {isTimerRunning ? (
+                <>
+                  <Pause className="w-4 h-4 fill-current" />
+                  <span>Pause</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Start Focus</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={skipTimer}
+              className="p-2.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-all hover:scale-105 cursor-pointer"
+              title="Skip to next session"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Bottom Ambient Noise Bar */}
+          <div className="flex flex-col items-center gap-1.5 pt-3 border-t border-neutral-100 dark:border-neutral-800 w-full shrink-0">
+            <div className="flex items-center justify-between w-full max-w-sm px-1">
+              <span className="text-[11px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 font-medium">
+                {ambientSound !== 'off' ? (
+                  <Volume2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 animate-pulse" />
+                ) : (
+                  <VolumeX className="w-3.5 h-3.5 text-neutral-400" />
+                )}
+                <span>Background Noise</span>
+                {ambientSound !== 'off' && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">
+                    Playing
+                  </span>
+                )}
+              </span>
+
+              {/* Volume Slider */}
+              {ambientSound !== 'off' && (
+                <div className="flex items-center gap-1">
+                  <Volume1 className="w-3 h-3 text-neutral-400" />
+                  <input
+                    type="range"
+                    min="0.08"
+                    max="0.45"
+                    step="0.02"
+                    value={ambientVolume}
+                    onChange={(e) => setAmbientVolumeLevel(parseFloat(e.target.value))}
+                    className="w-16 h-1 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-teal-600"
+                    title="Volume"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 flex-wrap justify-center">
+              {([
+                { key: 'off', label: 'Mute' },
+                { key: 'brown', label: 'Brown' },
+                { key: 'rain', label: 'Rain' },
+                { key: 'waves', label: 'Waves' },
+                { key: 'white', label: 'White' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setAmbientSoundMode(key)}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-all cursor-pointer ${
+                    ambientSound === key
+                      ? 'bg-teal-700 text-white shadow-xs font-semibold'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700/60'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -22,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
     syncStatus,
     syncNow,
     openAuthModal,
+    isTimerRunning,
+    timerFormatted,
   } = useStudy();
 
   const tabTitles: Record<string, string> = {
@@ -102,17 +104,31 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
           </span>
         </div>
 
-        {/* Quick Start Focus button */}
+        {/* Quick Start / Running Focus Timer button */}
         {activeTab !== 'timer' && (
           <button
             onClick={() => {
               playSoftClick();
               setActiveTab('timer');
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-xs transition-colors shrink-0"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all shrink-0 ${
+              isTimerRunning
+                ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                : 'bg-teal-600 hover:bg-teal-700 text-white'
+            }`}
+            title={isTimerRunning ? 'Timer is running in background - click to open' : 'Start Focus Timer'}
           >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span className="hidden xs:inline">Focus</span>
+            {isTimerRunning ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
+                <span className="font-mono tabular-nums">{timerFormatted}</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span className="hidden xs:inline">Focus</span>
+              </>
+            )}
           </button>
         )}
 
