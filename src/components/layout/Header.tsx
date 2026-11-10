@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStudy } from '../../context/StudyContext';
 import { formatDateDisplay } from '../../utils/date';
 import { Play, Settings, Moon, Sun } from 'lucide-react';
@@ -47,6 +47,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
+  const [justSynced, setJustSynced] = useState(false);
+
+  const handleManualSync = async () => {
+    playSoftClick();
+    await syncNow();
+    setJustSynced(true);
+    setTimeout(() => setJustSynced(false), 2000);
+  };
+
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 bg-[#F8F9FA]/90 dark:bg-[#121417]/90 backdrop-blur-md border-b border-neutral-200/60 dark:border-neutral-800/60 transition-colors">
       {/* Left Title / Breadcrumb */}
@@ -65,9 +74,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
         {/* Real-time Cloud Sync Status */}
         {account ? (
           <button
-            onClick={() => syncNow()}
+            onClick={handleManualSync}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/60 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-            title={syncStatus === 'syncing' ? 'Syncing to cloud...' : 'Real-time Cloud Sync Active (Click to force sync)'}
+            title="Real-time Cloud Sync Active (Click to force sync now)"
           >
             {syncStatus === 'syncing' ? (
               <>
@@ -78,6 +87,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
               <>
                 <span className="w-2 h-2 rounded-full bg-rose-500" />
                 <span className="hidden sm:inline text-[11px] text-rose-500">Retry Sync</span>
+              </>
+            ) : justSynced ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">Synced Now ✓</span>
               </>
             ) : (
               <>

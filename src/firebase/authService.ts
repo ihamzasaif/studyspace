@@ -13,7 +13,8 @@ import { auth, db, handleFirestoreError, OperationType } from './config';
 import { AppAccount } from '../types';
 
 export function sanitizeUsername(username: string): string {
-  return username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const base = username.includes('@') ? username.split('@')[0] : username;
+  return base.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
 }
 
 export function usernameToEmail(usernameOrEmail: string): string {
@@ -167,10 +168,13 @@ export function createInstantAccount(params: {
     profession: params.profession?.trim() || '',
     institution: params.institution?.trim() || '',
     avatarColor: params.avatarColor || '#0d9488',
+    password: params.password || '',
     createdAt: now,
     updatedAt: now,
   };
-  setDoc(doc(db, 'users', uid), profileData).catch(() => {});
+  setDoc(doc(db, 'users', uid), profileData).catch((err) => {
+    console.warn('Profile write notice:', err);
+  });
 
   notifyAuthSubscribers(acc);
   return acc;
@@ -215,6 +219,9 @@ export async function loginWithUsername(usernameOrEmail: string, password: strin
     const snap = await getDoc(doc(db, 'users', uid));
     if (snap.exists()) {
       const data = snap.data();
+      if (data.password && password && data.password !== password) {
+        throw new Error('Incorrect password. Please try again.');
+      }
       const acc: AppAccount = {
         uid,
         username: data.username || clean,
@@ -231,6 +238,9 @@ export async function loginWithUsername(usernameOrEmail: string, password: strin
       return acc;
     }
   } catch (firestoreErr) {
+    if (firestoreErr instanceof Error && firestoreErr.message.includes('Incorrect password')) {
+      throw firestoreErr;
+    }
     console.warn('Firestore user lookup skipped:', firestoreErr);
   }
 
