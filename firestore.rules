@@ -21,7 +21,7 @@ service cloud.firestore {
     }
 
     function isAuthorizedUser(userId) {
-      return isOwner(userId) || (isValidId(userId) && userId.matches('^acc_[a-zA-Z0-9_]+$'));
+      return isOwner(userId) || isValidId(userId);
     }
 
     function incoming() {

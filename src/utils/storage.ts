@@ -51,6 +51,7 @@ export function getBlankState(): StudyState {
       ambientNoise: 'off',
       theme: 'light',
     },
+    deletedIds: [],
   };
 }
 
@@ -497,19 +498,76 @@ dim(Col A) + dim(Nul A) = n (number of columns)`,
     notes,
     examCountdown,
     settings,
+    deletedIds: [],
   };
 }
 
+const BACKUP_STORAGE_KEY = 'study_room_app_state_backup';
+
 export function loadStudyState(): StudyState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    
+    // If main key is missing or empty, check redundant backup storage
     if (!raw) {
-      // Start fresh and completely blank by default!
+      const backupRaw = localStorage.getItem(BACKUP_STORAGE_KEY);
+      if (backupRaw) {
+        raw = backupRaw;
+      }
+    }
+
+    if (!raw) {
       const blank = getBlankState();
-      saveStudyState(blank);
       return blank;
     }
+
     const parsed = JSON.parse(raw);
+    
+    // If parsed state has no subjects or goals, check if backup has them
+    if (
+      (!parsed.subjects || parsed.subjects.length === 0) &&
+      (!parsed.goals || parsed.goals.length === 0)
+    ) {
+      const backupRaw = localStorage.getItem(BACKUP_STORAGE_KEY);
+      if (backupRaw) {
+        try {
+          const backupParsed = JSON.parse(backupRaw);
+          if (
+            (backupParsed.subjects && backupParsed.subjects.length > 0) ||
+            (backupParsed.goals && backupParsed.goals.length > 0)
+          ) {
+            return {
+              profile: {
+                name: backupParsed.profile?.name ?? parsed.profile?.name ?? '',
+                profession: backupParsed.profile?.profession ?? parsed.profile?.profession ?? '',
+                institution: backupParsed.profile?.institution ?? parsed.profile?.institution ?? '',
+                targetGoal: backupParsed.profile?.targetGoal ?? parsed.profile?.targetGoal ?? '',
+                avatarColor: backupParsed.profile?.avatarColor ?? parsed.profile?.avatarColor ?? '#0d9488',
+              },
+              subjects: backupParsed.subjects || [],
+              goals: backupParsed.goals || [],
+              timetable: backupParsed.timetable || [],
+              habits: backupParsed.habits || [],
+              habitLogs: backupParsed.habitLogs || {},
+              studySessions: backupParsed.studySessions || [],
+              notes: backupParsed.notes || [],
+              examCountdown: backupParsed.examCountdown || null,
+              settings: {
+                dailyTargetHours: backupParsed.settings?.dailyTargetHours ?? 3.5,
+                pomodoroWorkMinutes: backupParsed.settings?.pomodoroWorkMinutes ?? 25,
+                pomodoroShortBreakMinutes: backupParsed.settings?.pomodoroShortBreakMinutes ?? 5,
+                pomodoroLongBreakMinutes: backupParsed.settings?.pomodoroLongBreakMinutes ?? 15,
+                soundEnabled: backupParsed.settings?.soundEnabled ?? true,
+                ambientNoise: 'off',
+                theme: backupParsed.settings?.theme ?? 'light',
+              },
+              deletedIds: backupParsed.deletedIds || [],
+            };
+          }
+        } catch {}
+      }
+    }
+
     return {
       profile: {
         name: parsed.profile?.name ?? '',
@@ -535,6 +593,7 @@ export function loadStudyState(): StudyState {
         ambientNoise: 'off',
         theme: parsed.settings?.theme ?? 'light',
       },
+      deletedIds: parsed.deletedIds || [],
     };
   } catch (err) {
     console.error('Failed to parse saved study state:', err);
@@ -545,6 +604,15 @@ export function loadStudyState(): StudyState {
 export function saveStudyState(state: StudyState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // Redundant backup save whenever user has study data
+    if (
+      (state.subjects && state.subjects.length > 0) ||
+      (state.goals && state.goals.length > 0) ||
+      (state.timetable && state.timetable.length > 0) ||
+      (state.habits && state.habits.length > 0)
+    ) {
+      localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(state));
+    }
   } catch (err) {
     console.error('Failed to save study state:', err);
   }

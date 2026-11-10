@@ -103,6 +103,7 @@ export interface StudyState {
   notes: Note[];
   examCountdown: ExamCountdown | null;
   settings: UserSettings;
+  deletedIds?: string[];
 }
 
 export type ActiveTab =

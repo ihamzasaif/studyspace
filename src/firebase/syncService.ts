@@ -20,12 +20,14 @@ export async function saveStudyStateToCloud(userId: string, state: StudyState): 
     notes: state.notes,
     examCountdown: state.examCountdown,
     settings: state.settings,
+    deletedIds: state.deletedIds || [],
     updatedAt: new Date().toISOString(),
   };
 
   try {
     await setDoc(doc(db, 'users', userId, 'studyData', 'current'), payload);
   } catch (error) {
+    console.warn('saveStudyStateToCloud notice:', error);
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
@@ -59,9 +61,10 @@ export async function getCloudStudyState(userId: string): Promise<StudyState | n
         ambientNoise: 'off',
         theme: 'system',
       },
+      deletedIds: Array.isArray(data.deletedIds) ? data.deletedIds : [],
     };
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
+    console.warn('getCloudStudyState notice:', error);
     return null;
   }
 }
@@ -101,13 +104,14 @@ export function subscribeToCloudStudyState(
             ambientNoise: 'off',
             theme: 'system',
           },
+          deletedIds: Array.isArray(data.deletedIds) ? data.deletedIds : [],
         };
         onUpdate(incomingState);
       }
     },
     (error) => {
+      console.warn('subscribeToCloudStudyState notice:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, path);
     }
   );
 }

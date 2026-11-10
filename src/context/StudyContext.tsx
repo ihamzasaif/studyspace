@@ -434,6 +434,52 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const isCloudInitializedRef = useRef(false);
   const cloudSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const stateRef = useRef<StudyState>(state);
+  stateRef.current = state;
+  const accountRef = useRef<AppAccount | null>(account);
+  accountRef.current = account;
+
+  // Immediate commit helper for zero-latency storage and instant cloud push
+  const commitState = (updater: (prev: StudyState) => StudyState): StudyState => {
+    let nextState: StudyState = stateRef.current;
+    setState((prev) => {
+      const next = updater(prev);
+      nextState = next;
+      stateRef.current = next;
+      saveStudyState(next);
+      if (accountRef.current?.uid) {
+        saveStudyStateToCloud(accountRef.current.uid, next).catch((err) => {
+          console.warn('Instant cloud save notice:', err);
+        });
+      }
+      return next;
+    });
+    return nextState;
+  };
+
+  // Immediate save on page close, tab switch, refresh, or publish
+  useEffect(() => {
+    const handleFlush = () => {
+      saveStudyState(stateRef.current);
+      if (accountRef.current?.uid) {
+        saveStudyStateToCloud(accountRef.current.uid, stateRef.current).catch(() => {});
+      }
+    };
+
+    window.addEventListener('beforeunload', handleFlush);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        handleFlush();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleFlush);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
   // Subscribe to Firebase Auth state
   useEffect(() => {
     const unsubscribe = subscribeToAuth((userAccount) => {
@@ -469,7 +515,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     setSyncStatus('syncing');
 
-    // 1. Initial pull: fetch cloud state and MERGE to prevent blank defaults from wiping data!
+    // 1. Initial pull: fetch cloud state and MERGE so neither local nor cloud data is ever lost
     getCloudStudyState(account.uid)
       .then((cloudData) => {
         if (cloudData) {
@@ -477,7 +523,8 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           setState((currentLocal) => {
             const merged = mergeStudyStates(currentLocal, cloudData);
             saveStudyState(merged);
-            // If local had unsynced items, push merged back to cloud so nothing is lost
+            stateRef.current = merged;
+            // Push merged back to cloud to guarantee both are in perfect sync
             saveStudyStateToCloud(account.uid, merged).catch(() => {});
             return merged;
           });
@@ -485,17 +532,9 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             isIncomingCloudUpdateRef.current = false;
           }, 300);
         } else {
-          // No remote document exists yet: initialize cloud with local state if it has items
+          // No remote document exists yet: initialize cloud with current local state
           setState((currentLocal) => {
-            if (
-              currentLocal.subjects.length > 0 ||
-              currentLocal.goals.length > 0 ||
-              currentLocal.habits.length > 0 ||
-              currentLocal.timetable.length > 0 ||
-              currentLocal.notes.length > 0
-            ) {
-              saveStudyStateToCloud(account.uid, currentLocal).catch(() => {});
-            }
+            saveStudyStateToCloud(account.uid, currentLocal).catch(() => {});
             return currentLocal;
           });
         }
@@ -514,18 +553,11 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       (cloudState) => {
         isIncomingCloudUpdateRef.current = true;
         setState((currentLocal) => {
-          let updated: StudyState;
-          if (!isCloudInitializedRef.current) {
-            updated = mergeStudyStates(currentLocal, cloudState);
-            isCloudInitializedRef.current = true;
-          } else {
-            updated = {
-              ...cloudState,
-              profile: { ...currentLocal.profile, ...(cloudState.profile || {}) },
-              settings: { ...currentLocal.settings, ...(cloudState.settings || {}) },
-            };
-          }
+          // ALWAYS merge: never overwrite populated local state with empty cloud state!
+          const updated = mergeStudyStates(currentLocal, cloudState);
           saveStudyState(updated);
+          stateRef.current = updated;
+          isCloudInitializedRef.current = true;
           return updated;
         });
         setSyncStatus('synced');
@@ -547,6 +579,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Persist state changes locally AND continuously sync to cloud if authenticated
   useEffect(() => {
     saveStudyState(state);
+    stateRef.current = state;
 
     if (
       account?.uid &&
@@ -557,7 +590,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (cloudSyncTimerRef.current) {
         clearTimeout(cloudSyncTimerRef.current);
       }
-      // Real-time synchronization debounced by 600ms
+      // Real-time synchronization debounced by 400ms
       cloudSyncTimerRef.current = setTimeout(async () => {
         try {
           await saveStudyStateToCloud(account.uid, state);
@@ -566,7 +599,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           console.warn('Cloud sync debounced notice:', err);
           setSyncStatus('synced');
         }
-      }, 600);
+      }, 400);
     }
   }, [state, account?.uid]);
 
@@ -578,7 +611,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const syncNow = async () => {
-    saveStudyState(state);
+    saveStudyState(stateRef.current);
     if (!account?.uid) {
       setIsAuthModalOpen(true);
       return;
@@ -587,9 +620,10 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       // Pull remote first, merge with local, and push to cloud
       const remoteData = await getCloudStudyState(account.uid);
-      const merged = mergeStudyStates(state, remoteData);
+      const merged = mergeStudyStates(stateRef.current, remoteData);
       isIncomingCloudUpdateRef.current = true;
       setState(merged);
+      stateRef.current = merged;
       saveStudyState(merged);
       await saveStudyStateToCloud(account.uid, merged);
       isCloudInitializedRef.current = true;
@@ -613,65 +647,81 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const addSubject = (subjectData: Omit<Subject, 'id' | 'createdAt'>): Subject => {
     const newSubject: Subject = {
       ...subjectData,
-      id: `sub-${Date.now()}`,
+      id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       createdAt: todayStr,
     };
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       subjects: [...prev.subjects, newSubject],
+      deletedIds: (prev.deletedIds || []).filter(id => id !== newSubject.id),
     }));
     return newSubject;
   };
 
   const updateSubject = (id: string, updates: Partial<Subject>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       subjects: prev.subjects.map(s => (s.id === id ? { ...s, ...updates } : s)),
     }));
   };
 
   const deleteSubject = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      subjects: prev.subjects.filter(s => s.id !== id),
-      goals: prev.goals.filter(g => g.subjectId !== id),
-      timetable: prev.timetable.filter(t => t.subjectId !== id),
-      studySessions: prev.studySessions.filter(s => s.subjectId !== id),
-      notes: prev.notes.map(n => (n.subjectId === id ? { ...n, subjectId: undefined } : n)),
-    }));
+    commitState(prev => {
+      const relatedGoalIds = prev.goals.filter(g => g.subjectId === id).map(g => g.id);
+      const relatedTimetableIds = prev.timetable.filter(t => t.subjectId === id).map(t => t.id);
+      const relatedSessionIds = prev.studySessions.filter(s => s.subjectId === id).map(s => s.id);
+      const newDeleted = Array.from(new Set([
+        ...(prev.deletedIds || []),
+        id,
+        ...relatedGoalIds,
+        ...relatedTimetableIds,
+        ...relatedSessionIds,
+      ])).slice(-500);
+
+      return {
+        ...prev,
+        subjects: prev.subjects.filter(s => s.id !== id),
+        goals: prev.goals.filter(g => g.subjectId !== id),
+        timetable: prev.timetable.filter(t => t.subjectId !== id),
+        studySessions: prev.studySessions.filter(s => s.subjectId !== id),
+        notes: prev.notes.map(n => (n.subjectId === id ? { ...n, subjectId: undefined } : n)),
+        deletedIds: newDeleted,
+      };
+    });
     if (selectedSubjectId === id) {
       setSelectedSubjectId(null);
     }
   };
 
   const getSubject = (id: string) => {
-    return state.subjects.find(s => s.id === id);
+    return stateRef.current.subjects.find(s => s.id === id);
   };
 
   // Goals CRUD
   const addGoal = (goalData: Omit<Goal, 'id' | 'order'>): Goal => {
-    const dayGoals = state.goals.filter(g => g.date === goalData.date);
+    const dayGoals = stateRef.current.goals.filter(g => g.date === goalData.date);
     const newGoal: Goal = {
       ...goalData,
-      id: `goal-${Date.now()}`,
+      id: `goal-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       order: dayGoals.length + 1,
     };
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       goals: [...prev.goals, newGoal],
+      deletedIds: (prev.deletedIds || []).filter(id => id !== newGoal.id),
     }));
     return newGoal;
   };
 
   const updateGoal = (id: string, updates: Partial<Goal>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       goals: prev.goals.map(g => (g.id === id ? { ...g, ...updates } : g)),
     }));
   };
 
   const toggleGoal = (id: string) => {
-    setState(prev => {
+    commitState(prev => {
       let isAllCompleted = false;
       const targetGoal = prev.goals.find(g => g.id === id);
       const newGoals = prev.goals.map(g => {
@@ -715,14 +765,15 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const deleteGoal = (id: string) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       goals: prev.goals.filter(g => g.id !== id),
+      deletedIds: Array.from(new Set([...(prev.deletedIds || []), id])).slice(-500),
     }));
   };
 
   const reorderGoals = (dateStr: string, reorderedIds: string[]) => {
-    setState(prev => {
+    commitState(prev => {
       const otherGoals = prev.goals.filter(g => g.date !== dateStr);
       const reordered = reorderedIds
         .map((id, index) => {
@@ -740,11 +791,11 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const carryOverUnfinishedGoals = (fromDateStr: string = todayStr): number => {
     const tomorrowStr = addDays(fromDateStr, 1);
-    const unfinished = state.goals.filter(g => g.date === fromDateStr && !g.completed);
+    const unfinished = stateRef.current.goals.filter(g => g.date === fromDateStr && !g.completed);
 
     if (unfinished.length === 0) return 0;
 
-    const existingTomorrowGoals = state.goals.filter(g => g.date === tomorrowStr);
+    const existingTomorrowGoals = stateRef.current.goals.filter(g => g.date === tomorrowStr);
     let nextOrder = existingTomorrowGoals.length + 1;
 
     const carriedGoals: Goal[] = unfinished.map(g => ({
@@ -755,9 +806,8 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       notes: g.notes ? `${g.notes} (Carried from ${fromDateStr})` : `Carried from ${fromDateStr}`,
     }));
 
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
-      // Mark original unfinished as kept or we can leave them in previous day as unfinished record
       goals: [...prev.goals, ...carriedGoals],
     }));
 
@@ -768,26 +818,28 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const addTimetableBlock = (blockData: Omit<TimetableBlock, 'id'>): TimetableBlock => {
     const newBlock: TimetableBlock = {
       ...blockData,
-      id: `tt-${Date.now()}`,
+      id: `tt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     };
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       timetable: [...prev.timetable, newBlock],
+      deletedIds: (prev.deletedIds || []).filter(id => id !== newBlock.id),
     }));
     return newBlock;
   };
 
   const updateTimetableBlock = (id: string, updates: Partial<TimetableBlock>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       timetable: prev.timetable.map(t => (t.id === id ? { ...t, ...updates } : t)),
     }));
   };
 
   const deleteTimetableBlock = (id: string) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       timetable: prev.timetable.filter(t => t.id !== id),
+      deletedIds: Array.from(new Set([...(prev.deletedIds || []), id])).slice(-500),
     }));
   };
 
@@ -795,25 +847,26 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const addHabit = (habitData: Omit<Habit, 'id' | 'createdAt'>): Habit => {
     const newHabit: Habit = {
       ...habitData,
-      id: `hab-${Date.now()}`,
+      id: `hab-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       createdAt: todayStr,
     };
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       habits: [...prev.habits, newHabit],
+      deletedIds: (prev.deletedIds || []).filter(id => id !== newHabit.id),
     }));
     return newHabit;
   };
 
   const updateHabit = (id: string, updates: Partial<Habit>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       habits: prev.habits.map(h => (h.id === id ? { ...h, ...updates } : h)),
     }));
   };
 
   const deleteHabit = (id: string) => {
-    setState(prev => {
+    commitState(prev => {
       const newLogs = { ...prev.habitLogs };
       Object.keys(newLogs).forEach(date => {
         newLogs[date] = newLogs[date].filter(hid => hid !== id);
@@ -822,12 +875,13 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         ...prev,
         habits: prev.habits.filter(h => h.id !== id),
         habitLogs: newLogs,
+        deletedIds: Array.from(new Set([...(prev.deletedIds || []), id])).slice(-500),
       };
     });
   };
 
   const toggleHabitDay = (habitId: string, dateStr: string) => {
-    setState(prev => {
+    commitState(prev => {
       const logsForDate = prev.habitLogs[dateStr] || [];
       const isDone = logsForDate.includes(habitId);
       const updatedList = isDone
@@ -848,19 +902,21 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const addStudySession = (sessionData: Omit<StudySession, 'id' | 'timestamp'>) => {
     const newSession: StudySession = {
       ...sessionData,
-      id: `sess-${Date.now()}`,
+      id: `sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString(),
     };
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       studySessions: [...prev.studySessions, newSession],
+      deletedIds: (prev.deletedIds || []).filter(id => id !== newSession.id),
     }));
   };
 
   const deleteStudySession = (id: string) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       studySessions: prev.studySessions.filter(s => s.id !== id),
+      deletedIds: Array.from(new Set([...(prev.deletedIds || []), id])).slice(-500),
     }));
   };
 
@@ -869,19 +925,20 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const now = new Date().toISOString();
     const newNote: Note = {
       ...noteData,
-      id: `note-${Date.now()}`,
+      id: `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       createdAt: now,
       updatedAt: now,
     };
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       notes: [newNote, ...prev.notes],
+      deletedIds: (prev.deletedIds || []).filter(id => id !== newNote.id),
     }));
     return newNote;
   };
 
   const updateNote = (id: string, updates: Partial<Note>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       notes: prev.notes.map(n =>
         n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n
@@ -890,14 +947,15 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const deleteNote = (id: string) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       notes: prev.notes.filter(n => n.id !== id),
+      deletedIds: Array.from(new Set([...(prev.deletedIds || []), id])).slice(-500),
     }));
   };
 
   const togglePinNote = (id: string) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       notes: prev.notes.map(n => (n.id === id ? { ...n, isPinned: !n.isPinned } : n)),
     }));
@@ -905,7 +963,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Exam Countdown
   const setExamCountdown = (exam: ExamCountdown | null) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       examCountdown: exam,
     }));
@@ -913,7 +971,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Profile
   const updateProfile = (updates: Partial<UserProfile>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       profile: {
         ...prev.profile,
@@ -924,7 +982,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Settings
   const updateSettings = (updates: Partial<UserSettings>) => {
-    setState(prev => ({
+    commitState(prev => ({
       ...prev,
       settings: {
         ...prev.settings,
@@ -936,22 +994,21 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // System actions
   const resetToSampleData = () => {
     const sample = getInitialSampleData();
-    saveStudyState(sample);
-    setState(sample);
+    commitState(() => sample);
   };
 
   const clearData = () => {
     const empty = clearAllData();
-    setState(empty);
+    commitState(() => empty);
   };
 
   const exportData = () => {
-    exportDataAsJSON(state);
+    exportDataAsJSON(stateRef.current);
   };
 
   const importData = (jsonStr: string) => {
     const imported = importDataFromJSON(jsonStr);
-    setState(imported);
+    commitState(() => imported);
   };
 
   // Computed metrics
