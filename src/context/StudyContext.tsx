@@ -253,11 +253,27 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     localStorage.setItem('study_room_theme', theme);
   }, [theme]);
 
-  // Global Pomodoro Timer State (persists continuously across all tab switches & page changes)
-  const [timerMode, setTimerMode] = useState<TimerMode>('work');
+  // Global Pomodoro Timer State (persists continuously second-by-second across all tab switches & page refreshes)
+  const TIMER_STORAGE_KEY = 'study_room_focus_timer_v1';
+
+  const initialTimerSnapshot = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(TIMER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.timeLeft === 'number' && parsed.timeLeft >= 0) {
+        return parsed;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [timerMode, setTimerMode] = useState<TimerMode>(() => initialTimerSnapshot?.mode || 'work');
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
-  const [timerSessionCount, setTimerSessionCount] = useState<number>(1);
-  const [timerSubjectId, setTimerSubjectId] = useState<string>('');
+  const [timerSessionCount, setTimerSessionCount] = useState<number>(() => initialTimerSnapshot?.sessionCount || 1);
+  const [timerSubjectId, setTimerSubjectIdState] = useState<string>(() => initialTimerSnapshot?.subjectId || '');
   const [ambientSound, setAmbientSound] = useState<AmbientSoundType>('off');
   const [ambientVolume, setAmbientVolume] = useState<number>(0.28);
 
@@ -268,10 +284,49 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const [timerTimeLeft, setTimerTimeLeft] = useState<number>(() => {
+    if (initialTimerSnapshot) {
+      if (initialTimerSnapshot.isRunning && initialTimerSnapshot.lastTick) {
+        const elapsed = Math.floor((Date.now() - initialTimerSnapshot.lastTick) / 1000);
+        const remaining = initialTimerSnapshot.timeLeft - elapsed;
+        if (remaining > 0) return remaining;
+        return 0;
+      }
+      if (initialTimerSnapshot.timeLeft > 0) {
+        return initialTimerSnapshot.timeLeft;
+      }
+    }
     return (loadStudyState()?.settings?.pomodoroWorkMinutes || 25) * 60;
   });
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Synchronous refs to prevent stale closure data in intervals and beforeunload
+  const timerModeRef = useRef<TimerMode>(timerMode);
+  timerModeRef.current = timerMode;
+  const timerTimeLeftRef = useRef<number>(timerTimeLeft);
+  timerTimeLeftRef.current = timerTimeLeft;
+  const isTimerRunningRef = useRef<boolean>(isTimerRunning);
+  isTimerRunningRef.current = isTimerRunning;
+  const timerSessionCountRef = useRef<number>(timerSessionCount);
+  timerSessionCountRef.current = timerSessionCount;
+  const timerSubjectIdRef = useRef<string>(timerSubjectId);
+  timerSubjectIdRef.current = timerSubjectId;
+
+  const persistCurrentTimer = (running = isTimerRunningRef.current, timeLeft = timerTimeLeftRef.current) => {
+    try {
+      localStorage.setItem(
+        TIMER_STORAGE_KEY,
+        JSON.stringify({
+          mode: timerModeRef.current,
+          timeLeft,
+          isRunning: running,
+          lastTick: Date.now(),
+          sessionCount: timerSessionCountRef.current,
+          subjectId: timerSubjectIdRef.current,
+        })
+      );
+    } catch {}
+  };
 
   // Initialize timerSubjectId with first subject if unset
   useEffect(() => {
@@ -280,23 +335,21 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [state.subjects, timerSubjectId]);
 
-  // Sync timer duration if settings change while timer is not actively running
-  useEffect(() => {
-    if (!isTimerRunning) {
-      setTimerTimeLeft(getTimerDurationSeconds(timerMode));
-    }
-  }, [timerMode, state.settings.pomodoroWorkMinutes, state.settings.pomodoroShortBreakMinutes, state.settings.pomodoroLongBreakMinutes]);
-
-  // Global background ticking timer
+  // Global background ticking timer (persists every single second to localStorage)
   useEffect(() => {
     if (isTimerRunning) {
+      persistCurrentTimer(true, timerTimeLeft);
+
       timerIntervalRef.current = setInterval(() => {
         setTimerTimeLeft((prev) => {
           if (prev <= 1) {
+            persistCurrentTimer(false, 0);
             handleTimerSessionComplete();
             return 0;
           }
-          return prev - 1;
+          const next = prev - 1;
+          persistCurrentTimer(true, next);
+          return next;
         });
       }, 1000);
     } else {
@@ -304,6 +357,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
+      persistCurrentTimer(false, timerTimeLeft);
     }
 
     return () => {
@@ -332,7 +386,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         note: `Pomodoro Focus session #${timerSessionCount}`,
       };
 
-      setState((prev) => ({
+      commitState((prev) => ({
         ...prev,
         studySessions: [newSession, ...prev.studySessions],
       }));
@@ -346,49 +400,67 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       } catch {}
 
       if (timerSessionCount % 4 === 0) {
+        const nextDur = (state.settings.pomodoroLongBreakMinutes || 15) * 60;
         setTimerMode('longBreak');
-        setTimerTimeLeft((state.settings.pomodoroLongBreakMinutes || 15) * 60);
+        setTimerTimeLeft(nextDur);
+        persistCurrentTimer(false, nextDur);
       } else {
+        const nextDur = (state.settings.pomodoroShortBreakMinutes || 5) * 60;
         setTimerMode('shortBreak');
-        setTimerTimeLeft((state.settings.pomodoroShortBreakMinutes || 5) * 60);
+        setTimerTimeLeft(nextDur);
+        persistCurrentTimer(false, nextDur);
       }
       setTimerSessionCount((c) => c + 1);
     } else {
+      const nextDur = (state.settings.pomodoroWorkMinutes || 25) * 60;
       setTimerMode('work');
-      setTimerTimeLeft((state.settings.pomodoroWorkMinutes || 25) * 60);
+      setTimerTimeLeft(nextDur);
+      persistCurrentTimer(false, nextDur);
     }
   };
 
   const toggleTimerRunning = () => {
     playSoftClick();
-    setIsTimerRunning((prev) => !prev);
+    setIsTimerRunning((prev) => {
+      const next = !prev;
+      persistCurrentTimer(next, timerTimeLeftRef.current);
+      return next;
+    });
   };
 
   const startTimer = () => {
     playSoftClick();
     setIsTimerRunning(true);
+    persistCurrentTimer(true, timerTimeLeftRef.current);
   };
 
   const pauseTimer = () => {
     playSoftClick();
     setIsTimerRunning(false);
+    persistCurrentTimer(false, timerTimeLeftRef.current);
   };
 
   const resetTimer = () => {
     playSoftClick();
     setIsTimerRunning(false);
-    setTimerTimeLeft(getTimerDurationSeconds(timerMode));
+    const dur = getTimerDurationSeconds(timerMode);
+    setTimerTimeLeft(dur);
+    persistCurrentTimer(false, dur);
   };
 
   const skipTimer = () => {
     playSoftClick();
     setIsTimerRunning(false);
     if (timerMode === 'work') {
+      const dur = getTimerDurationSeconds('shortBreak');
       setTimerMode('shortBreak');
-      setTimerTimeLeft(getTimerDurationSeconds('shortBreak'));
+      setTimerTimeLeft(dur);
+      persistCurrentTimer(false, dur);
     } else {
+      const dur = getTimerDurationSeconds('work');
       setTimerMode('work');
-      setTimerTimeLeft(getTimerDurationSeconds('work'));
+      setTimerTimeLeft(dur);
+      persistCurrentTimer(false, dur);
     }
   };
 
@@ -396,7 +468,20 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     playSoftClick();
     setIsTimerRunning(false);
     setTimerMode(newMode);
-    setTimerTimeLeft(getTimerDurationSeconds(newMode));
+    const dur = getTimerDurationSeconds(newMode);
+    setTimerTimeLeft(dur);
+    persistCurrentTimer(false, dur);
+  };
+
+  const setTimerSubjectId = (id: string) => {
+    setTimerSubjectIdState(id);
+    try {
+      const raw = localStorage.getItem(TIMER_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify({ ...parsed, subjectId: id }));
+      }
+    } catch {}
   };
 
   const setAmbientSoundMode = (sound: AmbientSoundType, vol = ambientVolume) => {
@@ -464,6 +549,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (accountRef.current?.uid) {
         saveStudyStateToCloud(accountRef.current.uid, stateRef.current).catch(() => {});
       }
+      persistCurrentTimer(isTimerRunningRef.current, timerTimeLeftRef.current);
     };
 
     window.addEventListener('beforeunload', handleFlush);

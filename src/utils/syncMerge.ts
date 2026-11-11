@@ -1,15 +1,17 @@
 import { StudyState, Subject, Goal, TimetableBlock, Habit, StudySession, Note } from '../types';
+import { filterOutSampleData, KNOWN_SAMPLE_IDS } from './storage';
 
 /**
  * Intelligent two-way merge for StudyRoom state across multiple devices.
  * Guarantees zero data loss: items are merged by unique ID rather than blindly overwritten.
  */
 export function mergeStudyStates(local: StudyState, remote: StudyState | null | undefined): StudyState {
-  if (!remote) return local;
+  if (!remote) return filterOutSampleData(local);
 
   const deletedSet = new Set<string>([
     ...(local.deletedIds || []),
     ...(remote.deletedIds || []),
+    ...KNOWN_SAMPLE_IDS,
   ]);
 
   // 1. Merge Subjects by ID
@@ -129,7 +131,7 @@ export function mergeStudyStates(local: StudyState, remote: StudyState | null | 
     theme: local.settings?.theme ?? remote.settings?.theme ?? 'system',
   };
 
-  return {
+  return filterOutSampleData({
     profile: mergedProfile,
     subjects: Array.from(subjectMap.values()),
     goals: Array.from(goalMap.values()),
@@ -141,5 +143,5 @@ export function mergeStudyStates(local: StudyState, remote: StudyState | null | 
     examCountdown: local.examCountdown || remote.examCountdown || null,
     settings: mergedSettings,
     deletedIds: Array.from(deletedSet).slice(-500),
-  };
+  });
 }

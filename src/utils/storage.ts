@@ -502,6 +502,30 @@ dim(Col A) + dim(Nul A) = n (number of columns)`,
   };
 }
 
+export const KNOWN_SAMPLE_IDS = new Set([
+  'sub-1', 'sub-2', 'sub-3', 'sub-4',
+  'goal-1', 'goal-2', 'goal-3', 'goal-4', 'goal-5',
+  'tt-1', 'tt-2', 'tt-3', 'tt-4', 'tt-5', 'tt-6', 'tt-7', 'tt-8', 'tt-9',
+  'habit-1', 'habit-2', 'habit-3', 'habit-4',
+  'sess-1', 'sess-2', 'sess-3', 'sess-4', 'sess-5', 'sess-6', 'sess-7', 'sess-8',
+  'note-1', 'note-2', 'note-3'
+]);
+
+export function filterOutSampleData(rawState: StudyState): StudyState {
+  if (!rawState) return getBlankState();
+  const deleted = new Set([...(rawState.deletedIds || []), ...KNOWN_SAMPLE_IDS]);
+  return {
+    ...rawState,
+    subjects: (rawState.subjects || []).filter((s) => s && s.id && !KNOWN_SAMPLE_IDS.has(s.id)),
+    goals: (rawState.goals || []).filter((g) => g && g.id && !KNOWN_SAMPLE_IDS.has(g.id)),
+    timetable: (rawState.timetable || []).filter((t) => t && t.id && !KNOWN_SAMPLE_IDS.has(t.id)),
+    habits: (rawState.habits || []).filter((h) => h && h.id && !KNOWN_SAMPLE_IDS.has(h.id)),
+    studySessions: (rawState.studySessions || []).filter((s) => s && s.id && !KNOWN_SAMPLE_IDS.has(s.id)),
+    notes: (rawState.notes || []).filter((n) => n && n.id && !KNOWN_SAMPLE_IDS.has(n.id)),
+    deletedIds: Array.from(deleted),
+  };
+}
+
 const BACKUP_STORAGE_KEY = 'study_room_app_state_backup';
 
 export function loadStudyState(): StudyState {
@@ -536,7 +560,7 @@ export function loadStudyState(): StudyState {
             (backupParsed.subjects && backupParsed.subjects.length > 0) ||
             (backupParsed.goals && backupParsed.goals.length > 0)
           ) {
-            return {
+            const sanitizedBackup = filterOutSampleData({
               profile: {
                 name: backupParsed.profile?.name ?? parsed.profile?.name ?? '',
                 profession: backupParsed.profile?.profession ?? parsed.profile?.profession ?? '',
@@ -562,13 +586,14 @@ export function loadStudyState(): StudyState {
                 theme: backupParsed.settings?.theme ?? 'light',
               },
               deletedIds: backupParsed.deletedIds || [],
-            };
+            });
+            return sanitizedBackup;
           }
         } catch {}
       }
     }
 
-    return {
+    const cleanResult = filterOutSampleData({
       profile: {
         name: parsed.profile?.name ?? '',
         profession: parsed.profile?.profession ?? '',
@@ -594,7 +619,9 @@ export function loadStudyState(): StudyState {
         theme: parsed.settings?.theme ?? 'light',
       },
       deletedIds: parsed.deletedIds || [],
-    };
+    });
+
+    return cleanResult;
   } catch (err) {
     console.error('Failed to parse saved study state:', err);
     return getBlankState();
@@ -603,15 +630,16 @@ export function loadStudyState(): StudyState {
 
 export function saveStudyState(state: StudyState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const cleanState = filterOutSampleData(state);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanState));
     // Redundant backup save whenever user has study data
     if (
-      (state.subjects && state.subjects.length > 0) ||
-      (state.goals && state.goals.length > 0) ||
-      (state.timetable && state.timetable.length > 0) ||
-      (state.habits && state.habits.length > 0)
+      (cleanState.subjects && cleanState.subjects.length > 0) ||
+      (cleanState.goals && cleanState.goals.length > 0) ||
+      (cleanState.timetable && cleanState.timetable.length > 0) ||
+      (cleanState.habits && cleanState.habits.length > 0)
     ) {
-      localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(cleanState));
     }
   } catch (err) {
     console.error('Failed to save study state:', err);

@@ -356,10 +356,15 @@ export const FocusTimerView: React.FC = () => {
                   <Pause className="w-4 h-4 fill-current" />
                   <span>Pause</span>
                 </>
+              ) : timerProgressRatio > 0 && timerProgressRatio < 1 ? (
+                <>
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>{timerMode === 'work' ? 'Resume Focus' : 'Resume Break'}</span>
+                </>
               ) : (
                 <>
                   <Play className="w-4 h-4 fill-current" />
-                  <span>Start Focus</span>
+                  <span>{timerMode === 'work' ? 'Start Focus' : 'Start Break'}</span>
                 </>
               )}
             </button>

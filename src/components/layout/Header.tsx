@@ -24,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
     openAuthModal,
     isTimerRunning,
     timerFormatted,
+    timerProgressRatio,
   } = useStudy();
 
   const tabTitles: Record<string, string> = {
@@ -128,13 +129,26 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all shrink-0 ${
               isTimerRunning
                 ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                : timerProgressRatio > 0 && timerProgressRatio < 1
+                ? 'bg-teal-700 hover:bg-teal-800 text-white'
                 : 'bg-teal-600 hover:bg-teal-700 text-white'
             }`}
-            title={isTimerRunning ? 'Timer is running in background - click to open' : 'Start Focus Timer'}
+            title={
+              isTimerRunning
+                ? 'Timer is running in background - click to open'
+                : timerProgressRatio > 0 && timerProgressRatio < 1
+                ? `Timer paused at ${timerFormatted} - click to resume`
+                : 'Start Focus Timer'
+            }
           >
             {isTimerRunning ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
+                <span className="font-mono tabular-nums">{timerFormatted}</span>
+              </>
+            ) : timerProgressRatio > 0 && timerProgressRatio < 1 ? (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
                 <span className="font-mono tabular-nums">{timerFormatted}</span>
               </>
             ) : (
