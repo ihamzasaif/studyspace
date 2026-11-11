@@ -150,6 +150,18 @@ interface StudyContextType {
   skipBreak: () => void;
   breakFormatted: string;
 
+  // Active Goal Tracking during Study
+  activeGoalId: string | null;
+  activeGoalElapsedSeconds: number;
+  setActiveGoalId: (id: string | null) => void;
+  selectNextGoalAndResume: (nextGoalId: string) => void;
+  justCompletedGoalInfo: {
+    goalTitle: string;
+    secondsSpent: number;
+    subjectName?: string;
+  } | null;
+  dismissJustCompletedGoal: () => void;
+
   // Global Pomodoro Timer & Ambient Sound
   timerMode: TimerMode;
   timerTimeLeft: number;
@@ -165,6 +177,7 @@ interface StudyContextType {
   toggleTimerRunning: () => void;
   resetTimer: () => void;
   skipTimer: () => void;
+  finishPomodoroEarly: (customNote?: string) => void;
   switchTimerMode: (mode: TimerMode) => void;
   setTimerSubjectId: (id: string) => void;
   setAmbientSoundMode: (sound: AmbientSoundType, vol?: number) => void;
@@ -354,6 +367,50 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return initialNormalSnapshot?.sessionBreakSeconds || 0;
   });
 
+  // --- ACTIVE GOAL IN STUDY TIMER ---
+  const ACTIVE_GOAL_KEY = 'study_room_active_goal_v1';
+  const initialActiveGoalSnapshot = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(ACTIVE_GOAL_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [activeGoalId, setActiveGoalIdState] = useState<string | null>(() => {
+    return initialActiveGoalSnapshot?.goalId || null;
+  });
+
+  const [activeGoalElapsedSeconds, setActiveGoalElapsedSeconds] = useState<number>(() => {
+    return initialActiveGoalSnapshot?.elapsedSeconds || 0;
+  });
+
+  const [justCompletedGoalInfo, setJustCompletedGoalInfo] = useState<{
+    goalTitle: string;
+    secondsSpent: number;
+    subjectName?: string;
+  } | null>(null);
+
+  const activeGoalIdRef = useRef(activeGoalId);
+  activeGoalIdRef.current = activeGoalId;
+  const activeGoalElapsedRef = useRef(activeGoalElapsedSeconds);
+  activeGoalElapsedRef.current = activeGoalElapsedSeconds;
+
+  const persistActiveGoal = () => {
+    try {
+      localStorage.setItem(
+        ACTIVE_GOAL_KEY,
+        JSON.stringify({
+          goalId: activeGoalIdRef.current,
+          elapsedSeconds: activeGoalElapsedRef.current,
+          lastTick: Date.now(),
+        })
+      );
+    } catch {}
+  };
+
   // Synchronous Refs for accurate ticks, tab background throttling, and flushes
   const normalElapsedRef = useRef(normalElapsedSeconds);
   normalElapsedRef.current = normalElapsedSeconds;
@@ -426,6 +483,14 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             normalElapsedRef.current = next;
             return next;
           });
+          if (activeGoalIdRef.current) {
+            setActiveGoalElapsedSeconds((prev) => {
+              const next = prev + delta;
+              activeGoalElapsedRef.current = next;
+              return next;
+            });
+            persistActiveGoal();
+          }
           normalLastTickRef.current = now;
           persistNormalTimer();
         }
@@ -481,6 +546,21 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setIsNormalBreakRunning(false);
       isNormalBreakRunningRef.current = false;
     }
+    // Auto-select first uncompleted today goal if none is active
+    if (!activeGoalIdRef.current) {
+      const firstUnfinished = state.goals.find((g) => g.date === todayStr && !g.completed);
+      if (firstUnfinished) {
+        setActiveGoalIdState(firstUnfinished.id);
+        activeGoalIdRef.current = firstUnfinished.id;
+        setActiveGoalElapsedSeconds(0);
+        activeGoalElapsedRef.current = 0;
+        persistActiveGoal();
+        if (firstUnfinished.subjectId) {
+          setNormalSubjectIdState(firstUnfinished.subjectId);
+          normalSubjectIdRef.current = firstUnfinished.subjectId;
+        }
+      }
+    }
     normalLastTickRef.current = Date.now();
     setIsNormalRunning(true);
     isNormalRunningRef.current = true;
@@ -514,7 +594,58 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     normalElapsedRef.current = 0;
     setTotalSessionBreakSeconds(0);
     totalSessionBreakSecondsRef.current = 0;
+    setActiveGoalElapsedSeconds(0);
+    activeGoalElapsedRef.current = 0;
     persistNormalTimer();
+    persistActiveGoal();
+  };
+
+  const setActiveGoalId = (id: string | null) => {
+    playSoftClick();
+    setActiveGoalIdState(id);
+    activeGoalIdRef.current = id;
+    setActiveGoalElapsedSeconds(0);
+    activeGoalElapsedRef.current = 0;
+    persistActiveGoal();
+
+    if (id) {
+      const g = state.goals.find((goal) => goal.id === id);
+      if (g && g.subjectId) {
+        setNormalSubjectId(g.subjectId);
+        setTimerSubjectId(g.subjectId);
+      }
+      setJustCompletedGoalInfo(null);
+    }
+  };
+
+  const selectNextGoalAndResume = (nextGoalId: string) => {
+    playSoftClick();
+    const nextGoal = state.goals.find((g) => g.id === nextGoalId);
+    if (!nextGoal) return;
+
+    setActiveGoalIdState(nextGoalId);
+    activeGoalIdRef.current = nextGoalId;
+    setActiveGoalElapsedSeconds(0);
+    activeGoalElapsedRef.current = 0;
+    persistActiveGoal();
+
+    setJustCompletedGoalInfo(null);
+
+    if (nextGoal.subjectId) {
+      setNormalSubjectId(nextGoal.subjectId);
+      setTimerSubjectId(nextGoal.subjectId);
+    }
+
+    // Auto-resume timer!
+    if (timerSystemMode === 'normal') {
+      startNormalTimer();
+    } else {
+      startTimer();
+    }
+  };
+
+  const dismissJustCompletedGoal = () => {
+    setJustCompletedGoalInfo(null);
   };
 
   const saveNormalSession = (customNote?: string) => {
@@ -724,6 +855,15 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           persistCurrentTimer(true, next);
           return next;
         });
+
+        if (timerModeRef.current === 'work' && activeGoalIdRef.current) {
+          setActiveGoalElapsedSeconds((prev) => {
+            const next = prev + 1;
+            activeGoalElapsedRef.current = next;
+            return next;
+          });
+          persistActiveGoal();
+        }
       }, 1000);
     } else {
       if (timerIntervalRef.current) {
@@ -803,6 +943,19 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const startTimer = () => {
     playSoftClick();
+    if (!activeGoalIdRef.current) {
+      const firstUnfinished = state.goals.find((g) => g.date === todayStr && !g.completed);
+      if (firstUnfinished) {
+        setActiveGoalIdState(firstUnfinished.id);
+        activeGoalIdRef.current = firstUnfinished.id;
+        setActiveGoalElapsedSeconds(0);
+        activeGoalElapsedRef.current = 0;
+        persistActiveGoal();
+        if (firstUnfinished.subjectId) {
+          setTimerSubjectId(firstUnfinished.subjectId);
+        }
+      }
+    }
     setIsTimerRunning(true);
     persistCurrentTimer(true, timerTimeLeftRef.current);
   };
@@ -834,6 +987,71 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setTimerMode('work');
       setTimerTimeLeft(dur);
       persistCurrentTimer(false, dur);
+    }
+  };
+
+  const finishPomodoroEarly = (customNote?: string) => {
+    playSoftClick();
+    setIsTimerRunning(false);
+
+    if (timerMode === 'work') {
+      const totalDur = getTimerDurationSeconds('work');
+      const elapsedSeconds = Math.max(0, totalDur - timerTimeLeftRef.current);
+      // Give credit for elapsed time (minimum 1 minute if at least 20s spent, otherwise full credit for finishing early)
+      const minutesSpent = elapsedSeconds >= 20
+        ? Math.max(1, Math.round(elapsedSeconds / 60))
+        : (state.settings.pomodoroWorkMinutes || 25);
+
+      const subId = timerSubjectId || state.subjects[0]?.id || 'general';
+      const hrs = Math.floor(elapsedSeconds / 3600);
+      const mins = Math.floor((elapsedSeconds % 3600) / 60);
+      const secs = elapsedSeconds % 60;
+      const durLabel = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m ${secs}s`;
+
+      const newSession: StudySession = {
+        id: `sess-${Date.now()}`,
+        subjectId: subId,
+        date: todayStr,
+        minutes: minutesSpent,
+        mode: 'pomodoro',
+        timestamp: new Date().toISOString(),
+        note: customNote || `Pomodoro #${timerSessionCount} (Finished early: ${durLabel})`,
+      };
+
+      commitState((prev) => ({
+        ...prev,
+        studySessions: [newSession, ...prev.studySessions],
+      }));
+
+      if (state.settings.soundEnabled) {
+        playChime();
+      }
+
+      try {
+        confetti({
+          particleCount: 90,
+          spread: 70,
+          origin: { y: 0.65 },
+        });
+      } catch {}
+
+      if (timerSessionCount % 4 === 0) {
+        const nextDur = (state.settings.pomodoroLongBreakMinutes || 15) * 60;
+        setTimerMode('longBreak');
+        setTimerTimeLeft(nextDur);
+        persistCurrentTimer(false, nextDur);
+      } else {
+        const nextDur = (state.settings.pomodoroShortBreakMinutes || 5) * 60;
+        setTimerMode('shortBreak');
+        setTimerTimeLeft(nextDur);
+        persistCurrentTimer(false, nextDur);
+      }
+      setTimerSessionCount((c) => c + 1);
+    } else {
+      const nextDur = (state.settings.pomodoroWorkMinutes || 25) * 60;
+      setTimerMode('work');
+      setTimerTimeLeft(nextDur);
+      persistCurrentTimer(false, nextDur);
     }
   };
 
@@ -1184,12 +1402,20 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     commitState(prev => {
       let isAllCompleted = false;
       const targetGoal = prev.goals.find(g => g.id === id);
+      const isCompleting = targetGoal ? !targetGoal.completed : false;
+      const wasActive = id === activeGoalIdRef.current;
+      const timeSpentThisSession = wasActive ? activeGoalElapsedRef.current : 0;
+
       const newGoals = prev.goals.map(g => {
         if (g.id === id) {
           const completed = !g.completed;
+          const prevSeconds = g.timeSpentSeconds || 0;
+          const updatedSeconds = completed ? prevSeconds + timeSpentThisSession : prevSeconds;
           return {
             ...g,
             completed,
+            timeSpentSeconds: updatedSeconds,
+            timeSpentMinutes: Math.max(1, Math.round(updatedSeconds / 60)),
             completedAt: completed ? new Date().toISOString() : undefined,
           };
         }
@@ -1207,13 +1433,47 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (isAllCompleted) {
         try {
           confetti({
-            particleCount: 45,
-            spread: 55,
+            particleCount: 55,
+            spread: 60,
             origin: { y: 0.7 },
             colors: ['#0d9488', '#6366f1', '#10b981', '#f59e0b'],
           });
         } catch {
           // ignore
+        }
+      }
+
+      // If active goal was just completed:
+      // 1. Pause timer
+      // 2. Set justCompletedGoalInfo with time spent
+      // 3. Clear active goal
+      if (wasActive && isCompleting && targetGoal) {
+        if (isNormalRunningRef.current) {
+          setIsNormalRunning(false);
+          isNormalRunningRef.current = false;
+          persistNormalTimer();
+        }
+        if (isTimerRunningRef.current) {
+          setIsTimerRunning(false);
+          isTimerRunningRef.current = false;
+          persistCurrentTimer(false, timerTimeLeftRef.current);
+        }
+
+        const subjectObj = prev.subjects.find((s) => s.id === targetGoal.subjectId);
+        setJustCompletedGoalInfo({
+          goalTitle: targetGoal.title,
+          secondsSpent: timeSpentThisSession,
+          subjectName: subjectObj?.name,
+        });
+
+        setActiveGoalIdState(null);
+        activeGoalIdRef.current = null;
+        setActiveGoalElapsedSeconds(0);
+        activeGoalElapsedRef.current = 0;
+        persistActiveGoal();
+
+        if (stateRef.current.settings.soundEnabled) {
+          playChime();
         }
       }
 
@@ -1612,6 +1872,12 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         resumeBreak,
         skipBreak,
         breakFormatted,
+        activeGoalId,
+        activeGoalElapsedSeconds,
+        setActiveGoalId,
+        selectNextGoalAndResume,
+        justCompletedGoalInfo,
+        dismissJustCompletedGoal,
         timerMode,
         timerTimeLeft,
         isTimerRunning,
@@ -1626,6 +1892,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         toggleTimerRunning,
         resetTimer,
         skipTimer,
+        finishPomodoroEarly,
         switchTimerMode,
         setTimerSubjectId,
         setAmbientSoundMode,

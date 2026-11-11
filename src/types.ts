@@ -18,6 +18,8 @@ export interface Goal {
   priority: Priority;
   notes?: string;
   estimatedMinutes?: number;
+  timeSpentSeconds?: number;
+  timeSpentMinutes?: number;
   order: number;
   completedAt?: string;
 }
