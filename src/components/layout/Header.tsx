@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStudy } from '../../context/StudyContext';
 import { formatDateDisplay } from '../../utils/date';
-import { Play, Settings, Moon, Sun } from 'lucide-react';
+import { Play, Settings, Moon, Sun, Coffee } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
 
 interface HeaderProps {
@@ -22,6 +22,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
     syncStatus,
     syncNow,
     openAuthModal,
+    timerSystemMode,
+    normalElapsedSeconds,
+    isNormalRunning,
+    isNormalOnBreak,
+    normalFormatted,
+    breakFormatted,
     isTimerRunning,
     timerFormatted,
     timerProgressRatio,
@@ -127,21 +133,59 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
               setActiveTab('timer');
             }}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all shrink-0 ${
-              isTimerRunning
+              timerSystemMode === 'normal'
+                ? isNormalOnBreak
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                  : isNormalRunning
+                  ? 'bg-teal-600 hover:bg-teal-700 text-white animate-pulse'
+                  : normalElapsedSeconds > 0
+                  ? 'bg-teal-700 hover:bg-teal-800 text-white'
+                  : 'bg-teal-600 hover:bg-teal-700 text-white'
+                : isTimerRunning
                 ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
                 : timerProgressRatio > 0 && timerProgressRatio < 1
                 ? 'bg-teal-700 hover:bg-teal-800 text-white'
                 : 'bg-teal-600 hover:bg-teal-700 text-white'
             }`}
             title={
-              isTimerRunning
-                ? 'Timer is running in background - click to open'
+              timerSystemMode === 'normal'
+                ? isNormalOnBreak
+                  ? `Break countdown active: ${breakFormatted} - click to view`
+                  : isNormalRunning
+                  ? `Study timer running: ${normalFormatted} - click to open`
+                  : normalElapsedSeconds > 0
+                  ? `Study timer paused at ${normalFormatted} - click to resume`
+                  : 'Start Study Timer'
+                : isTimerRunning
+                ? 'Pomodoro is running in background - click to open'
                 : timerProgressRatio > 0 && timerProgressRatio < 1
-                ? `Timer paused at ${timerFormatted} - click to resume`
+                ? `Pomodoro paused at ${timerFormatted} - click to resume`
                 : 'Start Focus Timer'
             }
           >
-            {isTimerRunning ? (
+            {timerSystemMode === 'normal' ? (
+              isNormalOnBreak ? (
+                <>
+                  <Coffee className="w-3.5 h-3.5" />
+                  <span className="font-mono tabular-nums">{breakFormatted}</span>
+                </>
+              ) : isNormalRunning ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
+                  <span className="font-mono tabular-nums">{normalFormatted}</span>
+                </>
+              ) : normalElapsedSeconds > 0 ? (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span className="font-mono tabular-nums">{normalFormatted}</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span className="hidden xs:inline">Study Timer</span>
+                </>
+              )
+            ) : isTimerRunning ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
                 <span className="font-mono tabular-nums">{timerFormatted}</span>

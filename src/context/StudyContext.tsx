@@ -41,6 +41,7 @@ import confetti from 'canvas-confetti';
 import { playChime, playSoftClick, startAmbientNoise, stopAmbientNoise } from '../utils/audio';
 
 export type TimerMode = 'work' | 'shortBreak' | 'longBreak';
+export type TimerSystemMode = 'normal' | 'pomodoro';
 export type AmbientSoundType = 'off' | 'brown' | 'white' | 'rain' | 'waves';
 
 interface StudyContextType {
@@ -121,7 +122,35 @@ interface StudyContextType {
   weeklyStudyHours: { day: string; date: string; hours: number; isToday: boolean }[];
   subjectStats: { subject: Subject; hours: number; totalGoals: number; completedGoals: number; percentage: number }[];
 
-  // Global Background Timer & Ambient Sound
+  // Global Timer System Mode
+  timerSystemMode: TimerSystemMode;
+  setTimerSystemMode: (mode: TimerSystemMode) => void;
+
+  // Normal Study Timer (Stopwatch Mode)
+  normalElapsedSeconds: number;
+  isNormalRunning: boolean;
+  normalSubjectId: string;
+  setNormalSubjectId: (id: string) => void;
+  startNormalTimer: () => void;
+  pauseNormalTimer: () => void;
+  toggleNormalTimer: () => void;
+  resetNormalTimer: () => void;
+  saveNormalSession: (note?: string) => void;
+  normalFormatted: string;
+
+  // Break Mode for Normal Timer
+  isNormalOnBreak: boolean;
+  normalBreakCountdown: number;
+  normalBreakTotalSeconds: number;
+  isNormalBreakRunning: boolean;
+  totalSessionBreakSeconds: number;
+  startBreak: (minutes: number) => void;
+  pauseBreak: () => void;
+  resumeBreak: () => void;
+  skipBreak: () => void;
+  breakFormatted: string;
+
+  // Global Pomodoro Timer & Ambient Sound
   timerMode: TimerMode;
   timerTimeLeft: number;
   isTimerRunning: boolean;
@@ -252,6 +281,350 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     localStorage.setItem('study_room_theme', theme);
   }, [theme]);
+
+  // Global Timer System Mode ('normal' by default as requested)
+  const [timerSystemMode, setTimerSystemModeState] = useState<TimerSystemMode>(() => {
+    try {
+      const saved = localStorage.getItem('study_room_timer_sys_mode');
+      if (saved === 'pomodoro' || saved === 'normal') return saved;
+    } catch {}
+    return 'normal';
+  });
+
+  const setTimerSystemMode = (mode: TimerSystemMode) => {
+    playSoftClick();
+    setTimerSystemModeState(mode);
+    try {
+      localStorage.setItem('study_room_timer_sys_mode', mode);
+    } catch {}
+  };
+
+  // --- NORMAL STUDY TIMER (Stopwatch & Break System) ---
+  const NORMAL_TIMER_KEY = 'study_room_normal_timer_v2';
+
+  const initialNormalSnapshot = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(NORMAL_TIMER_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [normalElapsedSeconds, setNormalElapsedSeconds] = useState<number>(() => {
+    if (initialNormalSnapshot && typeof initialNormalSnapshot.elapsedSeconds === 'number') {
+      if (initialNormalSnapshot.isRunning && !initialNormalSnapshot.isOnBreak && initialNormalSnapshot.lastTick) {
+        const delta = Math.floor((Date.now() - initialNormalSnapshot.lastTick) / 1000);
+        return initialNormalSnapshot.elapsedSeconds + Math.max(0, delta);
+      }
+      return initialNormalSnapshot.elapsedSeconds;
+    }
+    return 0;
+  });
+
+  const [isNormalRunning, setIsNormalRunning] = useState<boolean>(false);
+  const [normalSubjectId, setNormalSubjectIdState] = useState<string>(() => {
+    return initialNormalSnapshot?.subjectId || '';
+  });
+
+  // Break state inside Normal Timer
+  const [isNormalOnBreak, setIsNormalOnBreak] = useState<boolean>(() => {
+    return !!initialNormalSnapshot?.isOnBreak;
+  });
+
+  const [normalBreakTotalSeconds, setNormalBreakTotalSeconds] = useState<number>(() => {
+    return initialNormalSnapshot?.breakTotalSeconds || 300;
+  });
+
+  const [normalBreakCountdown, setNormalBreakCountdown] = useState<number>(() => {
+    if (initialNormalSnapshot && typeof initialNormalSnapshot.breakCountdown === 'number') {
+      if (initialNormalSnapshot.isOnBreak && initialNormalSnapshot.isBreakRunning && initialNormalSnapshot.breakLastTick) {
+        const delta = Math.floor((Date.now() - initialNormalSnapshot.breakLastTick) / 1000);
+        return Math.max(0, initialNormalSnapshot.breakCountdown - delta);
+      }
+      return initialNormalSnapshot.breakCountdown;
+    }
+    return 300;
+  });
+
+  const [isNormalBreakRunning, setIsNormalBreakRunning] = useState<boolean>(false);
+
+  const [totalSessionBreakSeconds, setTotalSessionBreakSeconds] = useState<number>(() => {
+    return initialNormalSnapshot?.sessionBreakSeconds || 0;
+  });
+
+  // Synchronous Refs for accurate ticks, tab background throttling, and flushes
+  const normalElapsedRef = useRef(normalElapsedSeconds);
+  normalElapsedRef.current = normalElapsedSeconds;
+  const isNormalRunningRef = useRef(isNormalRunning);
+  isNormalRunningRef.current = isNormalRunning;
+  const normalLastTickRef = useRef(Date.now());
+  const normalSubjectIdRef = useRef(normalSubjectId);
+  normalSubjectIdRef.current = normalSubjectId;
+
+  const isNormalOnBreakRef = useRef(isNormalOnBreak);
+  isNormalOnBreakRef.current = isNormalOnBreak;
+  const normalBreakCountdownRef = useRef(normalBreakCountdown);
+  normalBreakCountdownRef.current = normalBreakCountdown;
+  const normalBreakTotalSecondsRef = useRef(normalBreakTotalSeconds);
+  normalBreakTotalSecondsRef.current = normalBreakTotalSeconds;
+  const isNormalBreakRunningRef = useRef(isNormalBreakRunning);
+  isNormalBreakRunningRef.current = isNormalBreakRunning;
+  const normalBreakLastTickRef = useRef(Date.now());
+  const totalSessionBreakSecondsRef = useRef(totalSessionBreakSeconds);
+  totalSessionBreakSecondsRef.current = totalSessionBreakSeconds;
+
+  const persistNormalTimer = () => {
+    try {
+      localStorage.setItem(
+        NORMAL_TIMER_KEY,
+        JSON.stringify({
+          elapsedSeconds: normalElapsedRef.current,
+          isRunning: isNormalRunningRef.current,
+          lastTick: Date.now(),
+          subjectId: normalSubjectIdRef.current,
+          isOnBreak: isNormalOnBreakRef.current,
+          breakCountdown: normalBreakCountdownRef.current,
+          breakTotalSeconds: normalBreakTotalSecondsRef.current,
+          isBreakRunning: isNormalBreakRunningRef.current,
+          breakLastTick: Date.now(),
+          sessionBreakSeconds: totalSessionBreakSecondsRef.current,
+        })
+      );
+    } catch {}
+  };
+
+  // Initialize normalSubjectId with first subject if unset
+  useEffect(() => {
+    if (!normalSubjectId && state.subjects.length > 0) {
+      setNormalSubjectIdState(state.subjects[0].id);
+      normalSubjectIdRef.current = state.subjects[0].id;
+    }
+  }, [state.subjects, normalSubjectId]);
+
+  const setNormalSubjectId = (id: string) => {
+    setNormalSubjectIdState(id);
+    normalSubjectIdRef.current = id;
+    persistNormalTimer();
+  };
+
+  // High-precision ticking interval for Normal Study Stopwatch & Break Countdown
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+
+    if (isNormalRunning && !isNormalOnBreak) {
+      normalLastTickRef.current = Date.now();
+      persistNormalTimer();
+
+      timer = setInterval(() => {
+        const now = Date.now();
+        const delta = Math.floor((now - normalLastTickRef.current) / 1000);
+        if (delta >= 1) {
+          setNormalElapsedSeconds((prev) => {
+            const next = prev + delta;
+            normalElapsedRef.current = next;
+            return next;
+          });
+          normalLastTickRef.current = now;
+          persistNormalTimer();
+        }
+      }, 500);
+    } else if (isNormalOnBreak && isNormalBreakRunning) {
+      normalBreakLastTickRef.current = Date.now();
+      persistNormalTimer();
+
+      timer = setInterval(() => {
+        const now = Date.now();
+        const delta = Math.floor((now - normalBreakLastTickRef.current) / 1000);
+        if (delta >= 1) {
+          setNormalBreakCountdown((prev) => {
+            const next = Math.max(0, prev - delta);
+            normalBreakCountdownRef.current = next;
+            if (next === 0) {
+              handleNormalBreakComplete();
+            }
+            return next;
+          });
+          normalBreakLastTickRef.current = now;
+          persistNormalTimer();
+        }
+      }, 500);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isNormalRunning, isNormalOnBreak, isNormalBreakRunning]);
+
+  const handleNormalBreakComplete = () => {
+    setIsNormalBreakRunning(false);
+    isNormalBreakRunningRef.current = false;
+    if (state.settings.soundEnabled) {
+      playChime();
+    }
+    setTotalSessionBreakSeconds((prev) => {
+      const next = prev + normalBreakTotalSecondsRef.current;
+      totalSessionBreakSecondsRef.current = next;
+      return next;
+    });
+    setIsNormalOnBreak(false);
+    isNormalOnBreakRef.current = false;
+    persistNormalTimer();
+  };
+
+  const startNormalTimer = () => {
+    playSoftClick();
+    if (isNormalOnBreak) {
+      setIsNormalOnBreak(false);
+      isNormalOnBreakRef.current = false;
+      setIsNormalBreakRunning(false);
+      isNormalBreakRunningRef.current = false;
+    }
+    normalLastTickRef.current = Date.now();
+    setIsNormalRunning(true);
+    isNormalRunningRef.current = true;
+    persistNormalTimer();
+  };
+
+  const pauseNormalTimer = () => {
+    playSoftClick();
+    setIsNormalRunning(false);
+    isNormalRunningRef.current = false;
+    persistNormalTimer();
+  };
+
+  const toggleNormalTimer = () => {
+    if (isNormalRunning) {
+      pauseNormalTimer();
+    } else {
+      startNormalTimer();
+    }
+  };
+
+  const resetNormalTimer = () => {
+    playSoftClick();
+    setIsNormalRunning(false);
+    isNormalRunningRef.current = false;
+    setIsNormalOnBreak(false);
+    isNormalOnBreakRef.current = false;
+    setIsNormalBreakRunning(false);
+    isNormalBreakRunningRef.current = false;
+    setNormalElapsedSeconds(0);
+    normalElapsedRef.current = 0;
+    setTotalSessionBreakSeconds(0);
+    totalSessionBreakSecondsRef.current = 0;
+    persistNormalTimer();
+  };
+
+  const saveNormalSession = (customNote?: string) => {
+    playSoftClick();
+    const elapsed = normalElapsedRef.current;
+    if (elapsed < 30) {
+      resetNormalTimer();
+      return;
+    }
+
+    const minutesSpent = Math.max(1, Math.round(elapsed / 60));
+    const subId = normalSubjectIdRef.current || state.subjects[0]?.id || 'general';
+
+    const hrs = Math.floor(elapsed / 3600);
+    const mins = Math.floor((elapsed % 3600) / 60);
+    const secs = elapsed % 60;
+    const durLabel = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m ${secs}s`;
+
+    const newSession: StudySession = {
+      id: `sess-${Date.now()}`,
+      subjectId: subId,
+      date: todayStr,
+      minutes: minutesSpent,
+      mode: 'manual',
+      timestamp: new Date().toISOString(),
+      note: customNote || `Study Session: ${durLabel}`,
+    };
+
+    commitState((prev) => ({
+      ...prev,
+      studySessions: [newSession, ...prev.studySessions],
+    }));
+
+    if (state.settings.soundEnabled) {
+      playChime();
+    }
+
+    try {
+      confetti({
+        particleCount: 100,
+        spread: 75,
+        origin: { y: 0.65 },
+      });
+    } catch {}
+
+    resetNormalTimer();
+  };
+
+  const startBreak = (minutes: number) => {
+    playSoftClick();
+    const durationSeconds = minutes * 60;
+    setIsNormalRunning(false);
+    isNormalRunningRef.current = false;
+
+    setIsNormalOnBreak(true);
+    isNormalOnBreakRef.current = true;
+    setNormalBreakTotalSeconds(durationSeconds);
+    normalBreakTotalSecondsRef.current = durationSeconds;
+    setNormalBreakCountdown(durationSeconds);
+    normalBreakCountdownRef.current = durationSeconds;
+    normalBreakLastTickRef.current = Date.now();
+    setIsNormalBreakRunning(true);
+    isNormalBreakRunningRef.current = true;
+    persistNormalTimer();
+  };
+
+  const pauseBreak = () => {
+    playSoftClick();
+    setIsNormalBreakRunning(false);
+    isNormalBreakRunningRef.current = false;
+    persistNormalTimer();
+  };
+
+  const resumeBreak = () => {
+    playSoftClick();
+    normalBreakLastTickRef.current = Date.now();
+    setIsNormalBreakRunning(true);
+    isNormalBreakRunningRef.current = true;
+    persistNormalTimer();
+  };
+
+  const skipBreak = () => {
+    playSoftClick();
+    const elapsedBreak = Math.max(0, normalBreakTotalSecondsRef.current - normalBreakCountdownRef.current);
+    if (elapsedBreak > 0) {
+      setTotalSessionBreakSeconds((prev) => {
+        const next = prev + elapsedBreak;
+        totalSessionBreakSecondsRef.current = next;
+        return next;
+      });
+    }
+    setIsNormalBreakRunning(false);
+    isNormalBreakRunningRef.current = false;
+    setIsNormalOnBreak(false);
+    isNormalOnBreakRef.current = false;
+    persistNormalTimer();
+  };
+
+  const normalFormatted = useMemo(() => {
+    const hrs = Math.floor(normalElapsedSeconds / 3600);
+    const mins = Math.floor((normalElapsedSeconds % 3600) / 60);
+    const secs = normalElapsedSeconds % 60;
+    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [normalElapsedSeconds]);
+
+  const breakFormatted = useMemo(() => {
+    const mins = Math.floor(normalBreakCountdown / 60);
+    const secs = normalBreakCountdown % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [normalBreakCountdown]);
 
   // Global Pomodoro Timer State (persists continuously second-by-second across all tab switches & page refreshes)
   const TIMER_STORAGE_KEY = 'study_room_focus_timer_v1';
@@ -550,6 +923,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         saveStudyStateToCloud(accountRef.current.uid, stateRef.current).catch(() => {});
       }
       persistCurrentTimer(isTimerRunningRef.current, timerTimeLeftRef.current);
+      persistNormalTimer();
     };
 
     window.addEventListener('beforeunload', handleFlush);
@@ -1216,6 +1590,28 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         studyStreak,
         weeklyStudyHours,
         subjectStats,
+        timerSystemMode,
+        setTimerSystemMode,
+        normalElapsedSeconds,
+        isNormalRunning,
+        normalSubjectId,
+        setNormalSubjectId,
+        startNormalTimer,
+        pauseNormalTimer,
+        toggleNormalTimer,
+        resetNormalTimer,
+        saveNormalSession,
+        normalFormatted,
+        isNormalOnBreak,
+        normalBreakCountdown,
+        normalBreakTotalSeconds,
+        isNormalBreakRunning,
+        totalSessionBreakSeconds,
+        startBreak,
+        pauseBreak,
+        resumeBreak,
+        skipBreak,
+        breakFormatted,
         timerMode,
         timerTimeLeft,
         isTimerRunning,
