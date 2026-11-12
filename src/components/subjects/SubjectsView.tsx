@@ -5,6 +5,7 @@ import { COLOR_PALETTE } from '../../utils/storage';
 import { Plus, Edit2, Trash2, Clock, CheckCircle2, ChevronRight, X, BookOpen } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { formatMinutesHuman } from '../../utils/date';
 
 export const SubjectsView: React.FC = () => {
   const {
@@ -158,14 +159,13 @@ export const SubjectsView: React.FC = () => {
           {/* Quick Metrics for this subject */}
           <div className="grid grid-cols-3 gap-3">
             <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800/60">
-              <span className="text-xs text-neutral-500">Total Hours</span>
+              <span className="text-xs text-neutral-500">Study Time</span>
               <p className="text-xl font-bold tabular-nums text-neutral-900 dark:text-neutral-100 mt-1">
-                {(
+                {formatMinutesHuman(
                   state.studySessions
                     .filter((s) => s.subjectId === activeSelectedSub.id)
-                    .reduce((sum, s) => sum + s.minutes, 0) / 60
-                ).toFixed(1)}
-                h
+                    .reduce((sum, s) => sum + s.minutes, 0)
+                )}
               </p>
             </div>
             <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800/60">
@@ -249,9 +249,7 @@ export const SubjectsView: React.FC = () => {
             const completedCount = subGoals.filter((g) => g.completed).length;
             const percentage = subGoals.length > 0 ? Math.round((completedCount / subGoals.length) * 100) : 0;
             const subSessions = state.studySessions.filter((s) => s.subjectId === sub.id);
-            const hoursStudied = (
-              subSessions.reduce((sum, s) => sum + s.minutes, 0) / 60
-            ).toFixed(1);
+            const subMinutes = subSessions.reduce((sum, s) => sum + s.minutes, 0);
 
             return (
               <div
@@ -309,9 +307,9 @@ export const SubjectsView: React.FC = () => {
                   {/* Metrics bar */}
                   <div className="grid grid-cols-2 gap-2 my-3 p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/50 dark:border-neutral-800/50 text-xs">
                     <div>
-                      <span className="text-[11px] text-neutral-400">Hours Studied</span>
+                      <span className="text-[11px] text-neutral-400">Time Studied</span>
                       <p className="font-bold tabular-nums text-neutral-900 dark:text-neutral-100">
-                        {hoursStudied}h
+                        {formatMinutesHuman(subMinutes)}
                       </p>
                     </div>
                     <div>

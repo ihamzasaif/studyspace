@@ -20,6 +20,8 @@ import {
   Clock,
   Timer,
   ChevronRight,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 
 export const FocusTimerView: React.FC = () => {
@@ -33,6 +35,7 @@ export const FocusTimerView: React.FC = () => {
     studyStreak,
     // Active Goal tracking
     activeGoalId,
+    activeGoalElapsedSeconds,
     selectNextGoalAndResume,
     // Timer System Mode
     timerSystemMode,
@@ -72,6 +75,7 @@ export const FocusTimerView: React.FC = () => {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileGoalsExpanded, setIsMobileGoalsExpanded] = useState(false);
+  const [goalAlert, setGoalAlert] = useState<string | null>(null);
 
   useBackHandler(isFullscreen, () => setIsFullscreen(false), 'timer-fullscreen');
 
@@ -120,6 +124,84 @@ export const FocusTimerView: React.FC = () => {
     } else {
       finishPomodoroEarly();
     }
+  };
+
+  const handleNormalStartClick = () => {
+    if (isNormalRunning) {
+      // Pause
+      setGoalAlert(null);
+      toggleNormalTimer();
+      return;
+    }
+
+    // Attempting to Start/Resume
+    if (!activeGoalId) {
+      if (todayGoals.length === 0) {
+        setGoalAlert('Kindly add a goal for today to start studying.');
+      } else {
+        setGoalAlert('Kindly select your current goal to start studying.');
+      }
+      setIsMobileGoalsExpanded(true);
+      return;
+    }
+
+    setGoalAlert(null);
+    toggleNormalTimer();
+  };
+
+  const handlePomodoroStartClick = () => {
+    if (isTimerRunning) {
+      // Pause
+      setGoalAlert(null);
+      toggleTimerRunning();
+      return;
+    }
+
+    // Attempting to Start/Resume
+    if (timerMode === 'work' && !activeGoalId) {
+      if (todayGoals.length === 0) {
+        setGoalAlert('Kindly add a goal for today to start studying.');
+      } else {
+        setGoalAlert('Kindly select your current goal to start studying.');
+      }
+      setIsMobileGoalsExpanded(true);
+      return;
+    }
+
+    setGoalAlert(null);
+    toggleTimerRunning();
+  };
+
+  const handleGoalSelect = (goalId: string) => {
+    setGoalAlert(null);
+    selectNextGoalAndResume(goalId);
+  };
+
+  // Accurate format for Today's study time (e.g. "25m" or "1h 15m")
+  const formatStudyDuration = (mins: number) => {
+    if (!mins || mins <= 0) return '0m';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+    return `${m}m`;
+  };
+
+  // Format goal seconds accurately
+  const formatGoalTime = (secs: number) => {
+    if (!secs || secs <= 0) return '0m';
+    const mins = Math.floor(secs / 60);
+    const remSecs = secs % 60;
+    if (mins >= 60) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h}h ${m}m`;
+    }
+    if (mins > 0) {
+      return remSecs > 0 ? `${mins}m ${remSecs}s` : `${mins}m`;
+    }
+    return `${remSecs}s`;
   };
 
   return (
@@ -172,7 +254,7 @@ export const FocusTimerView: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsFullscreen(false)}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 rounded-xl shadow-md transition-all hover:scale-105 shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 rounded-xl shadow-md transition-all hover:scale-105 shrink-0 cursor-pointer"
             title="Exit Fullscreen (Esc)"
           >
             <Minimize2 className="w-4 h-4" />
@@ -247,7 +329,13 @@ export const FocusTimerView: React.FC = () => {
           </div>
 
           {/* Today's Goals (Simple, Clean, Distraction-Free) */}
-          <div className="flex-1 flex flex-col bg-white dark:bg-[#1A1D23] rounded-2xl p-3.5 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs min-h-0 overflow-hidden">
+          <div
+            className={`flex-1 flex flex-col bg-white dark:bg-[#1A1D23] rounded-2xl p-3.5 border transition-all min-h-0 overflow-hidden ${
+              goalAlert
+                ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/50 shadow-md'
+                : 'border-neutral-200/80 dark:border-neutral-800/80 shadow-xs'
+            }`}
+          >
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-100 dark:border-neutral-800/80 shrink-0">
               <div className="flex items-center gap-1.5">
                 <CheckSquare className="w-4 h-4 text-teal-600 dark:text-teal-400" />
@@ -271,13 +359,16 @@ export const FocusTimerView: React.FC = () => {
                 todayGoals.map((goal) => {
                   const sub = getSubject(goal.subjectId);
                   const isGoalActive = activeGoalId === goal.id;
+                  const timeSecs = isGoalActive
+                    ? activeGoalElapsedSeconds
+                    : goal.timeSpentSeconds || 0;
 
                   return (
                     <div
                       key={goal.id}
                       onClick={() => {
                         if (!goal.completed && !isGoalActive) {
-                          selectNextGoalAndResume(goal.id);
+                          handleGoalSelect(goal.id);
                         }
                       }}
                       className={`flex items-center justify-between gap-2 p-2 rounded-xl border transition-all cursor-pointer select-none ${
@@ -336,17 +427,17 @@ export const FocusTimerView: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Simple status dot or time spent */}
+                      {/* Display accurate time spent on goal */}
                       <div className="shrink-0 flex items-center gap-1.5">
                         {isGoalActive && (
                           <span
                             className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"
-                            title="Active goal"
+                            title="Currently active goal"
                           />
                         )}
-                        {goal.timeSpentMinutes && goal.timeSpentMinutes > 0 ? (
-                          <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums">
-                            {goal.timeSpentMinutes}m
+                        {timeSecs > 0 ? (
+                          <span className="text-[10px] font-mono text-neutral-500 dark:text-neutral-400 tabular-nums">
+                            ⏱️ {formatGoalTime(timeSecs)}
                           </span>
                         ) : null}
                       </div>
@@ -486,14 +577,31 @@ export const FocusTimerView: React.FC = () => {
           {/* ======================================================== */}
           {/* CENTRAL DIGITAL CLOCK                                    */}
           {/* ======================================================== */}
-          <div className="my-auto flex flex-col items-center justify-center w-full px-2 py-4 shrink-0">
+          <div className="my-auto flex flex-col items-center justify-center w-full px-2 py-3 shrink-0">
             {/* Subject Badge */}
             {activeSubject && (
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-neutral-100/80 dark:bg-neutral-800/70 border border-neutral-200/60 dark:border-neutral-700/60 mb-2.5">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-neutral-100/80 dark:bg-neutral-800/70 border border-neutral-200/60 dark:border-neutral-700/60 mb-2">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: activeSubject.color }} />
                 <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
                   {activeSubject.code ? `${activeSubject.code} · ` : ''}{activeSubject.name}
                 </span>
+              </div>
+            )}
+
+            {/* Mandatory Goal Selection Alert Notice */}
+            {goalAlert && (
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs font-semibold animate-pulse mb-3 max-w-md w-full">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>{goalAlert}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGoalAlert(null)}
+                  className="text-amber-600 hover:text-amber-800 p-0.5 cursor-pointer shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
@@ -565,10 +673,10 @@ export const FocusTimerView: React.FC = () => {
                       <RotateCcw className="w-4 h-4" />
                     </button>
 
-                    {/* Main Start / Pause / Resume Button */}
+                    {/* Main Start / Pause / Resume Button (Enforces Goal Selection First) */}
                     <button
                       type="button"
-                      onClick={toggleNormalTimer}
+                      onClick={handleNormalStartClick}
                       className={`px-7 sm:px-8 py-3.5 rounded-2xl font-bold text-sm text-white flex items-center gap-2 shadow-sm transition-all hover:scale-105 cursor-pointer ${
                         isNormalRunning
                           ? 'bg-amber-600 hover:bg-amber-700'
@@ -686,7 +794,7 @@ export const FocusTimerView: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={toggleTimerRunning}
+                    onClick={handlePomodoroStartClick}
                     className={`px-7 py-3 rounded-2xl font-bold text-sm text-white flex items-center gap-2 shadow-sm transition-all hover:scale-105 cursor-pointer ${
                       isTimerRunning
                         ? 'bg-amber-600 hover:bg-amber-700'
@@ -750,7 +858,11 @@ export const FocusTimerView: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsMobileGoalsExpanded(!isMobileGoalsExpanded)}
-              className="w-full flex items-center justify-between p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-800/80 text-xs font-bold text-neutral-800 dark:text-neutral-200 transition-colors"
+              className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs font-bold transition-all ${
+                goalAlert
+                  ? 'bg-amber-50 dark:bg-amber-950/70 border-2 border-amber-400 text-amber-900 dark:text-amber-200'
+                  : 'bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-800/80 text-neutral-800 dark:text-neutral-200'
+              }`}
             >
               <div className="flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-teal-600 dark:text-teal-400" />
@@ -776,13 +888,16 @@ export const FocusTimerView: React.FC = () => {
                   todayGoals.map((goal) => {
                     const isGoalActive = activeGoalId === goal.id;
                     const sub = getSubject(goal.subjectId);
+                    const timeSecs = isGoalActive
+                      ? activeGoalElapsedSeconds
+                      : goal.timeSpentSeconds || 0;
 
                     return (
                       <div
                         key={goal.id}
                         onClick={() => {
                           if (!goal.completed && !isGoalActive) {
-                            selectNextGoalAndResume(goal.id);
+                            handleGoalSelect(goal.id);
                           }
                         }}
                         className={`p-2 rounded-xl border text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
@@ -819,14 +934,21 @@ export const FocusTimerView: React.FC = () => {
                           </span>
                         </div>
 
-                        {sub && (
-                          <span
-                            className="text-[10px] font-medium shrink-0"
-                            style={{ color: sub.color }}
-                          >
-                            {sub.code || sub.name}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {timeSecs > 0 && (
+                            <span className="text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
+                              ⏱️ {formatGoalTime(timeSecs)}
+                            </span>
+                          )}
+                          {sub && (
+                            <span
+                              className="text-[10px] font-medium"
+                              style={{ color: sub.color }}
+                            >
+                              {sub.code || sub.name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })
@@ -836,17 +958,17 @@ export const FocusTimerView: React.FC = () => {
           </div>
 
           {/* ======================================================== */}
-          {/* COMPACT DAILY STUDY STATISTICS STRIP                     */}
+          {/* COMPACT DAILY STUDY STATISTICS STRIP (Accurate Format)   */}
           {/* ======================================================== */}
           <div className="w-full max-w-xl mx-auto py-2 px-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800/60 shrink-0 mt-1">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center divide-y sm:divide-y-0 sm:divide-x divide-neutral-200/50 dark:divide-neutral-700/50">
-              {/* Metric 1: Today Studied */}
+              {/* Metric 1: Today Studied (Accurate Minutes / Hours & Minutes) */}
               <div className="px-1 pt-1 sm:pt-0">
                 <span className="text-[10px] uppercase font-bold text-neutral-400 dark:text-neutral-500 tracking-wider">
                   Today
                 </span>
                 <p className="text-xs font-bold font-mono text-neutral-900 dark:text-neutral-100 tabular-nums">
-                  {(todayStudyMinutes / 60).toFixed(1)}h{' '}
+                  {formatStudyDuration(todayStudyMinutes)}{' '}
                   <span className="text-[10px] text-neutral-400 font-normal">/ {state.settings.dailyTargetHours}h</span>
                 </p>
               </div>

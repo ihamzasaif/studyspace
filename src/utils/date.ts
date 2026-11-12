@@ -193,3 +193,22 @@ export function getDaysRemaining(targetDateStr: string): { days: number; isPast:
     return { days: diffDays, isPast: false, label: `${diffDays} days left` };
   }
 }
+
+/**
+ * Format minutes into human-readable hours and minutes without awkward decimals like 0.1h
+ * Examples:
+ *   0 -> '0m'
+ *   15 -> '15m'
+ *   60 -> '1h'
+ *   75 -> '1h 15m'
+ */
+export function formatMinutesHuman(totalMinutes: number): string {
+  if (!totalMinutes || totalMinutes <= 0) return '0m';
+  const mins = Math.round(totalMinutes);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0) {
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  return `${m}m`;
+}

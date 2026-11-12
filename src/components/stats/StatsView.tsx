@@ -13,7 +13,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { getPastNDays, formatDateShort, calculateHabitStreak } from '../../utils/date';
+import { getPastNDays, formatDateShort, calculateHabitStreak, formatMinutesHuman } from '../../utils/date';
 import { Clock, CheckCircle2, Flame, Award, TrendingUp, Calendar } from 'lucide-react';
 import { playSoftClick } from '../../utils/audio';
 
@@ -77,13 +77,12 @@ export const StatsView: React.FC = () => {
 
   // Overall KPI totals
   const totalAllTimeMinutes = state.studySessions.reduce((acc, cur) => acc + cur.minutes, 0);
-  const totalAllTimeHours = (totalAllTimeMinutes / 60).toFixed(1);
   const totalCompletedGoals = state.goals.filter((g) => g.completed).length;
 
   const totalRangeMinutes = state.studySessions
     .filter((s) => (range === 'all' ? true : pastDays.includes(s.date)))
     .reduce((acc, cur) => acc + cur.minutes, 0);
-  const rangeDailyAverageHours = (totalRangeMinutes / (daysCount * 60)).toFixed(1);
+  const rangeDailyAverageMinutes = Math.round(totalRangeMinutes / daysCount);
 
   // Best habit streak across all habits
   const bestHabitStreak = useMemo(() => {
@@ -133,11 +132,11 @@ export const StatsView: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-white dark:bg-[#1A1D23] border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs">
           <div className="flex items-center justify-between text-neutral-500 text-xs font-medium">
-            <span>Total Study Hours</span>
+            <span>Total Study Time</span>
             <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400" />
           </div>
           <p className="text-2xl sm:text-3xl font-bold tabular-nums text-neutral-900 dark:text-neutral-100 mt-2">
-            {totalAllTimeHours}h
+            {formatMinutesHuman(totalAllTimeMinutes)}
           </p>
           <span className="text-[11px] text-neutral-400 mt-1 block">
             Across {state.studySessions.length} logged sessions
@@ -150,7 +149,7 @@ export const StatsView: React.FC = () => {
             <TrendingUp className="w-4 h-4 text-indigo-500" />
           </div>
           <p className="text-2xl sm:text-3xl font-bold tabular-nums text-neutral-900 dark:text-neutral-100 mt-2">
-            {rangeDailyAverageHours}h/day
+            {formatMinutesHuman(rangeDailyAverageMinutes)}/day
           </p>
           <span className="text-[11px] text-neutral-400 mt-1 block">
             Target: {state.settings.dailyTargetHours}h per day

@@ -47,9 +47,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
   const [quickGoalSubject, setQuickGoalSubject] = useState(state.subjects[0]?.id || '');
   const [showAddGoal, setShowAddGoal] = useState(false);
 
-  const studyHours = Number((todayStudyMinutes / 60).toFixed(1));
   const targetHours = state.settings.dailyTargetHours;
-  const targetProgressPercent = Math.min(100, Math.round((studyHours / targetHours) * 100));
+  const targetProgressPercent = Math.min(100, Math.round((todayStudyMinutes / (targetHours * 60)) * 100));
+
+  const formatStudyTimeDisplay = (mins: number) => {
+    if (!mins || mins <= 0) return '0m';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+    return `${m}m`;
+  };
 
   // Current day timetable blocks
   const currentDayOfWeek = getDayOfWeek(todayStr);
@@ -224,7 +233,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
           </div>
           <div className="mt-3">
             <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-neutral-900 dark:text-neutral-100">
-              {studyHours}h
+              {formatStudyTimeDisplay(todayStudyMinutes)}
               <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500">
                 /{targetHours}h
               </span>
@@ -519,7 +528,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
               </div>
 
               <span className="text-xs font-medium tabular-nums text-teal-600 dark:text-teal-400">
-                {weeklyStudyHours.reduce((acc, cur) => acc + cur.hours, 0).toFixed(1)}h total
+                {formatStudyTimeDisplay(
+                  Math.round(weeklyStudyHours.reduce((acc, cur) => acc + cur.hours, 0) * 60)
+                )} total
               </span>
             </div>
 
@@ -585,11 +596,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
                 const subGoals = state.goals.filter((g) => g.subjectId === sub.id);
                 const completed = subGoals.filter((g) => g.completed).length;
                 const percentage = subGoals.length > 0 ? Math.round((completed / subGoals.length) * 100) : 0;
-                const hours = (
-                  state.studySessions
-                    .filter((s) => s.subjectId === sub.id)
-                    .reduce((sum, s) => sum + s.minutes, 0) / 60
-                ).toFixed(1);
+                const subMins = state.studySessions
+                  .filter((s) => s.subjectId === sub.id)
+                  .reduce((sum, s) => sum + s.minutes, 0);
 
                 return (
                   <div
@@ -611,7 +620,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenSettings, onOpenProf
                         </span>
                       </div>
                       <span className="text-xs font-mono tabular-nums text-neutral-500 dark:text-neutral-400">
-                        {hours}h studied
+                        {formatStudyTimeDisplay(subMins)} studied
                       </span>
                     </div>
 

@@ -45,7 +45,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
     profile: 'Study Profile',
   };
 
-  const currentHours = (todayStudyMinutes / 60).toFixed(1);
+  const formatHeaderStudyTime = (mins: number) => {
+    if (!mins || mins <= 0) return '0m';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+    return `${m}m`;
+  };
 
   const getInitials = () => {
     if (!state.profile.name.trim()) return 'U';
@@ -121,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, onOpenProfile })
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/60 text-xs text-neutral-600 dark:text-neutral-300">
           <span className="text-neutral-400 dark:text-neutral-500">Today:</span>
           <span className="font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
-            {currentHours}h
+            {formatHeaderStudyTime(todayStudyMinutes)}
           </span>
         </div>
 

@@ -547,21 +547,6 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setIsNormalBreakRunning(false);
       isNormalBreakRunningRef.current = false;
     }
-    // Auto-select first uncompleted today goal if none is active
-    if (!activeGoalIdRef.current) {
-      const firstUnfinished = state.goals.find((g) => g.date === todayStr && !g.completed);
-      if (firstUnfinished) {
-        setActiveGoalIdState(firstUnfinished.id);
-        activeGoalIdRef.current = firstUnfinished.id;
-        setActiveGoalElapsedSeconds(0);
-        activeGoalElapsedRef.current = 0;
-        persistActiveGoal();
-        if (firstUnfinished.subjectId) {
-          setNormalSubjectIdState(firstUnfinished.subjectId);
-          normalSubjectIdRef.current = firstUnfinished.subjectId;
-        }
-      }
-    }
     normalLastTickRef.current = Date.now();
     setIsNormalRunning(true);
     isNormalRunningRef.current = true;
@@ -573,6 +558,24 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setIsNormalRunning(false);
     isNormalRunningRef.current = false;
     persistNormalTimer();
+
+    // Record time spent on active goal upon pause
+    if (activeGoalIdRef.current) {
+      const currentGoalId = activeGoalIdRef.current;
+      const currentSeconds = activeGoalElapsedRef.current;
+      commitState((prev) => ({
+        ...prev,
+        goals: prev.goals.map((g) =>
+          g.id === currentGoalId
+            ? {
+                ...g,
+                timeSpentSeconds: currentSeconds,
+                timeSpentMinutes: Math.max(1, Math.round(currentSeconds / 60)),
+              }
+            : g
+        ),
+      }));
+    }
   };
 
   const toggleNormalTimer = () => {
@@ -595,39 +598,79 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     normalElapsedRef.current = 0;
     setTotalSessionBreakSeconds(0);
     totalSessionBreakSecondsRef.current = 0;
-    setActiveGoalElapsedSeconds(0);
-    activeGoalElapsedRef.current = 0;
     persistNormalTimer();
     persistActiveGoal();
   };
 
   const setActiveGoalId = (id: string | null) => {
     playSoftClick();
+    // If switching from another goal, save that old goal's time first
+    if (activeGoalIdRef.current && activeGoalIdRef.current !== id) {
+      const oldGoalId = activeGoalIdRef.current;
+      const oldSeconds = activeGoalElapsedRef.current;
+      commitState((prev) => ({
+        ...prev,
+        goals: prev.goals.map((g) =>
+          g.id === oldGoalId
+            ? {
+                ...g,
+                timeSpentSeconds: oldSeconds,
+                timeSpentMinutes: Math.max(1, Math.round(oldSeconds / 60)),
+              }
+            : g
+        ),
+      }));
+    }
+
     setActiveGoalIdState(id);
     activeGoalIdRef.current = id;
-    setActiveGoalElapsedSeconds(0);
-    activeGoalElapsedRef.current = 0;
-    persistActiveGoal();
 
     if (id) {
-      const g = state.goals.find((goal) => goal.id === id);
-      if (g && g.subjectId) {
-        setNormalSubjectId(g.subjectId);
-        setTimerSubjectId(g.subjectId);
+      const targetGoal = stateRef.current.goals.find((goal) => goal.id === id);
+      const startingSeconds = targetGoal?.timeSpentSeconds || 0;
+      setActiveGoalElapsedSeconds(startingSeconds);
+      activeGoalElapsedRef.current = startingSeconds;
+
+      if (targetGoal && targetGoal.subjectId) {
+        setNormalSubjectId(targetGoal.subjectId);
+        setTimerSubjectId(targetGoal.subjectId);
       }
       setJustCompletedGoalInfo(null);
+    } else {
+      setActiveGoalElapsedSeconds(0);
+      activeGoalElapsedRef.current = 0;
     }
+    persistActiveGoal();
   };
 
   const selectNextGoalAndResume = (nextGoalId: string) => {
     playSoftClick();
-    const nextGoal = state.goals.find((g) => g.id === nextGoalId);
+    // Save previous goal's time if different
+    if (activeGoalIdRef.current && activeGoalIdRef.current !== nextGoalId) {
+      const oldGoalId = activeGoalIdRef.current;
+      const oldSeconds = activeGoalElapsedRef.current;
+      commitState((prev) => ({
+        ...prev,
+        goals: prev.goals.map((g) =>
+          g.id === oldGoalId
+            ? {
+                ...g,
+                timeSpentSeconds: oldSeconds,
+                timeSpentMinutes: Math.max(1, Math.round(oldSeconds / 60)),
+              }
+            : g
+        ),
+      }));
+    }
+
+    const nextGoal = stateRef.current.goals.find((g) => g.id === nextGoalId);
     if (!nextGoal) return;
 
     setActiveGoalIdState(nextGoalId);
     activeGoalIdRef.current = nextGoalId;
-    setActiveGoalElapsedSeconds(0);
-    activeGoalElapsedRef.current = 0;
+    const startingSeconds = nextGoal.timeSpentSeconds || 0;
+    setActiveGoalElapsedSeconds(startingSeconds);
+    activeGoalElapsedRef.current = startingSeconds;
     persistActiveGoal();
 
     setJustCompletedGoalInfo(null);
@@ -637,7 +680,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setTimerSubjectId(nextGoal.subjectId);
     }
 
-    // Auto-resume timer!
+    // Resume timer!
     if (timerSystemMode === 'normal') {
       startNormalTimer();
     } else {
@@ -675,9 +718,24 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       note: customNote || `Study Session: ${durLabel}`,
     };
 
+    // Save active goal's time if currently active
+    const currentGoalId = activeGoalIdRef.current;
+    const currentGoalSeconds = activeGoalElapsedRef.current;
+
     commitState((prev) => ({
       ...prev,
       studySessions: [newSession, ...prev.studySessions],
+      goals: currentGoalId
+        ? prev.goals.map((g) =>
+            g.id === currentGoalId
+              ? {
+                  ...g,
+                  timeSpentSeconds: currentGoalSeconds,
+                  timeSpentMinutes: Math.max(1, Math.round(currentGoalSeconds / 60)),
+                }
+              : g
+          )
+        : prev.goals,
     }));
 
     if (state.settings.soundEnabled) {
@@ -965,19 +1023,6 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const startTimer = () => {
     playSoftClick();
-    if (!activeGoalIdRef.current) {
-      const firstUnfinished = state.goals.find((g) => g.date === todayStr && !g.completed);
-      if (firstUnfinished) {
-        setActiveGoalIdState(firstUnfinished.id);
-        activeGoalIdRef.current = firstUnfinished.id;
-        setActiveGoalElapsedSeconds(0);
-        activeGoalElapsedRef.current = 0;
-        persistActiveGoal();
-        if (firstUnfinished.subjectId) {
-          setTimerSubjectId(firstUnfinished.subjectId);
-        }
-      }
-    }
     setIsTimerRunning(true);
     persistCurrentTimer(true, timerTimeLeftRef.current);
   };
@@ -986,6 +1031,24 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     playSoftClick();
     setIsTimerRunning(false);
     persistCurrentTimer(false, timerTimeLeftRef.current);
+
+    // Record time spent on active goal upon pause
+    if (activeGoalIdRef.current) {
+      const currentGoalId = activeGoalIdRef.current;
+      const currentSeconds = activeGoalElapsedRef.current;
+      commitState((prev) => ({
+        ...prev,
+        goals: prev.goals.map((g) =>
+          g.id === currentGoalId
+            ? {
+                ...g,
+                timeSpentSeconds: currentSeconds,
+                timeSpentMinutes: Math.max(1, Math.round(currentSeconds / 60)),
+              }
+            : g
+        ),
+      }));
+    }
   };
 
   const resetTimer = () => {
