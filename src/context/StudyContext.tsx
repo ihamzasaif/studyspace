@@ -148,6 +148,7 @@ interface StudyContextType {
   pauseBreak: () => void;
   resumeBreak: () => void;
   skipBreak: () => void;
+  extendBreak: (minutes?: number) => void;
   breakFormatted: string;
 
   // Active Goal Tracking during Study
@@ -651,7 +652,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const saveNormalSession = (customNote?: string) => {
     playSoftClick();
     const elapsed = normalElapsedRef.current;
-    if (elapsed < 30) {
+    if (elapsed <= 0) {
       resetNormalTimer();
       return;
     }
@@ -724,6 +725,27 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     normalBreakLastTickRef.current = Date.now();
     setIsNormalBreakRunning(true);
     isNormalBreakRunningRef.current = true;
+    persistNormalTimer();
+  };
+
+  const extendBreak = (minutes: number = 5) => {
+    playSoftClick();
+    const additionalSeconds = minutes * 60;
+    setNormalBreakCountdown((prev) => {
+      const next = prev + additionalSeconds;
+      normalBreakCountdownRef.current = next;
+      return next;
+    });
+    setNormalBreakTotalSeconds((prev) => {
+      const next = prev + additionalSeconds;
+      normalBreakTotalSecondsRef.current = next;
+      return next;
+    });
+    if (!isNormalBreakRunningRef.current) {
+      setIsNormalBreakRunning(true);
+      isNormalBreakRunningRef.current = true;
+      normalBreakLastTickRef.current = Date.now();
+    }
     persistNormalTimer();
   };
 
@@ -1871,6 +1893,7 @@ export const StudyProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         pauseBreak,
         resumeBreak,
         skipBreak,
+        extendBreak,
         breakFormatted,
         activeGoalId,
         activeGoalElapsedSeconds,
